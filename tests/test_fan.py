@@ -41,7 +41,6 @@ def _make_fan(default_speed: str = DEFAULT_SPEED_LAST_USED):
 
 
 class TestDefaultSpeed:
-
     @pytest.mark.asyncio
     async def test_turn_on_last_used_default(self) -> None:
         fan, mock_coord = _make_fan(DEFAULT_SPEED_LAST_USED)

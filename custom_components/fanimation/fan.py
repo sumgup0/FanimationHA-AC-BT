@@ -94,9 +94,7 @@ class FanimationFan(FanimationEntity, FanEntity):
         # Check for user-configured fixed default speed
         default_speed = DEFAULT_SPEED_LAST_USED
         if self.coordinator.config_entry and self.coordinator.config_entry.options:
-            default_speed = self.coordinator.config_entry.options.get(
-                CONF_DEFAULT_SPEED, DEFAULT_SPEED_LAST_USED
-            )
+            default_speed = self.coordinator.config_entry.options.get(CONF_DEFAULT_SPEED, DEFAULT_SPEED_LAST_USED)
 
         if default_speed in SPEED_OPTION_MAP:
             await self._async_set_speed(SPEED_OPTION_MAP[default_speed])

@@ -38,7 +38,6 @@ def _make_light(default_brightness: int = DEFAULT_BRIGHTNESS_LAST_USED):
 
 
 class TestDefaultBrightness:
-
     @pytest.mark.asyncio
     async def test_turn_on_last_used_default(self) -> None:
         light, mock_coord = _make_light(DEFAULT_BRIGHTNESS_LAST_USED)

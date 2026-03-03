@@ -75,14 +75,10 @@ class FanimationCoordinator(DataUpdateCoordinator[FanimationState]):
         except Exception as err:
             # Disconnect on failure to force clean reconnect next time
             await self.device.disconnect()
-            return await self._async_handle_failure(
-                f"Connection to {self.device.name} failed: {err}"
-            )
+            return await self._async_handle_failure(f"Connection to {self.device.name} failed: {err}")
 
         if state is None:
-            return await self._async_handle_failure(
-                f"No response from {self.device.name}"
-            )
+            return await self._async_handle_failure(f"No response from {self.device.name}")
 
         # --- Success ---
         was_failing = self._connection_failures > 0
@@ -122,9 +118,7 @@ class FanimationCoordinator(DataUpdateCoordinator[FanimationState]):
         if threshold > 0 and self._connection_failures >= threshold:
             # Hard unavailable — dismiss notification (HA shows unavailable natively)
             await self._async_dismiss_notification()
-            raise UpdateFailed(
-                f"{error_msg} after {self._connection_failures} attempts"
-            )
+            raise UpdateFailed(f"{error_msg} after {self._connection_failures} attempts")
 
         if self.data is not None:
             # Soft unavailable — return stale data, entities stay available

@@ -181,10 +181,7 @@ class TestPersistentNotification:
         await coordinator._async_update_data()
         await coordinator._async_update_data()
 
-        create_calls = [
-            c for c in mock_hass.services.async_call.call_args_list
-            if c[0][1] == "create"
-        ]
+        create_calls = [c for c in mock_hass.services.async_call.call_args_list if c[0][1] == "create"]
         assert len(create_calls) == 1
 
     @pytest.mark.asyncio
@@ -199,10 +196,7 @@ class TestPersistentNotification:
         mock_device.async_get_status.return_value = FanimationState(speed=1)
         await coordinator._async_update_data()
 
-        dismiss_calls = [
-            c for c in mock_hass.services.async_call.call_args_list
-            if c[0][1] == "dismiss"
-        ]
+        dismiss_calls = [c for c in mock_hass.services.async_call.call_args_list if c[0][1] == "dismiss"]
         assert len(dismiss_calls) == 1
 
     @pytest.mark.asyncio

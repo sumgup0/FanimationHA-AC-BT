@@ -40,6 +40,20 @@ def auto_enable_custom_integrations(enable_custom_integrations):
     yield
 
 
+@pytest.fixture(autouse=True)
+async def mock_bluetooth_deps(hass: HomeAssistant):
+    """Mark bluetooth dependencies as already set up.
+
+    Without this, HA tries to fully initialise bluetooth and
+    bluetooth_adapters during options flow init, which fails in CI
+    (no BLE adapter hardware). Adding them to hass.config.components
+    tells the dependency checker they are already loaded.
+    """
+    hass.config.components.add("bluetooth")
+    hass.config.components.add("bluetooth_adapters")
+    yield
+
+
 @pytest.fixture
 def mock_entry(hass: HomeAssistant) -> MockConfigEntry:
     """Create a mock config entry for testing options flow."""
@@ -55,17 +69,13 @@ def mock_entry(hass: HomeAssistant) -> MockConfigEntry:
 class TestOptionsFlow:
     """Tests for the options flow."""
 
-    async def test_options_flow_shows_form(
-        self, hass: HomeAssistant, mock_entry: MockConfigEntry
-    ) -> None:
+    async def test_options_flow_shows_form(self, hass: HomeAssistant, mock_entry: MockConfigEntry) -> None:
         """Options flow should show init form."""
         result = await hass.config_entries.options.async_init(mock_entry.entry_id)
         assert result["type"] is FlowResultType.FORM
         assert result["step_id"] == "init"
 
-    async def test_options_flow_saves_defaults(
-        self, hass: HomeAssistant, mock_entry: MockConfigEntry
-    ) -> None:
+    async def test_options_flow_saves_defaults(self, hass: HomeAssistant, mock_entry: MockConfigEntry) -> None:
         """Submitting options should save them to entry.options."""
         result = await hass.config_entries.options.async_init(mock_entry.entry_id)
         result = await hass.config_entries.options.async_configure(

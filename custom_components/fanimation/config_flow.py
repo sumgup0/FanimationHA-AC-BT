@@ -243,11 +243,7 @@ class FanimationOptionsFlow(OptionsFlowWithConfigEntry):
                 vol.Required(
                     CONF_DEFAULT_BRIGHTNESS,
                     default=self.options.get(CONF_DEFAULT_BRIGHTNESS, DEFAULT_BRIGHTNESS_LAST_USED),
-                ): NumberSelector(
-                    NumberSelectorConfig(
-                        min=0, max=100, step=1, mode=NumberSelectorMode.SLIDER
-                    )
-                ),
+                ): NumberSelector(NumberSelectorConfig(min=0, max=100, step=1, mode=NumberSelectorMode.SLIDER)),
             }
         )
 
