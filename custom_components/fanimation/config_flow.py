@@ -26,6 +26,7 @@ from .const import (
     CONF_DEFAULT_BRIGHTNESS,
     CONF_DEFAULT_SPEED,
     CONF_NOTIFY_ON_DISCONNECT,
+    CONF_SPEED_COUNT,
     CONF_UNAVAILABLE_THRESHOLD,
     DEFAULT_BRIGHTNESS_LAST_USED,
     DEFAULT_NOTIFY_ON_DISCONNECT,
@@ -37,6 +38,7 @@ from .const import (
     DOMAIN,
     LOGGER,
     MAX_UNAVAILABLE_THRESHOLD,
+    SPEED_COUNT,
 )
 
 SERVICE_UUID = "0000e000-0000-1000-8000-00805f9b34fb"
@@ -76,7 +78,7 @@ class FanimationConfigFlow(ConfigFlow, domain=DOMAIN):
                 max_attempts=2,
             )
             try:
-                # Verify the expected service and characteristics exist
+				# Verify the expected service and characteristics exist
                 services = client.services
                 write_char = services.get_characteristic(CHAR_WRITE)
                 notify_char = services.get_characteristic(CHAR_NOTIFY)
@@ -132,6 +134,7 @@ class FanimationConfigFlow(ConfigFlow, domain=DOMAIN):
                 data={
                     CONF_MAC: self._mac,
                     CONF_NAME: name,
+                    CONF_SPEED_COUNT: user_input[CONF_SPEED_COUNT],
                 },
             )
 
@@ -144,6 +147,7 @@ class FanimationConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema(
                 {
                     vol.Required(CONF_NAME, default=self._discovered_name): str,
+                    vol.Required(CONF_SPEED_COUNT, default=SPEED_COUNT): vol.In([3, 6]),
                 }
             ),
         )
@@ -160,7 +164,7 @@ class FanimationConfigFlow(ConfigFlow, domain=DOMAIN):
             await self.async_set_unique_id(mac)
             self._abort_if_unique_id_configured()
 
-            # Test-before-configure: verify the device is reachable
+				# Test-before-configure: verify the device is reachable
             # and has the expected GATT characteristics
             if not await self._async_validate_device(mac):
                 errors["base"] = "cannot_connect"
@@ -170,6 +174,7 @@ class FanimationConfigFlow(ConfigFlow, domain=DOMAIN):
                     data={
                         CONF_MAC: mac,
                         CONF_NAME: name,
+                        CONF_SPEED_COUNT: user_input[CONF_SPEED_COUNT],
                     },
                 )
 
@@ -182,6 +187,7 @@ class FanimationConfigFlow(ConfigFlow, domain=DOMAIN):
                         vol.Match(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"),
                     ),
                     vol.Required(CONF_NAME, default="Fanimation Fan"): str,
+                    vol.Required(CONF_SPEED_COUNT, default=SPEED_COUNT): vol.In([3, 6]),
                 }
             ),
             errors=errors,
@@ -194,7 +200,7 @@ class FanimationOptionsFlow(OptionsFlowWithConfigEntry):
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Manage the options."""
         if user_input is not None:
-            # Flatten sections into a single options dict
+            # Flatten sections into a single options dict 
             flat = {}
             flat.update(user_input.get("defaults", {}))
             flat.update(user_input.get("connection", {}))
