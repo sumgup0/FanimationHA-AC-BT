@@ -5,7 +5,8 @@
         "title": "Fanimation Ceiling Fan Detected",
         "description": "Found: {name} ({mac})\n\nThis fan can also be controlled by its RF remote. All commands from Home Assistant will read the current fan state first, so remote changes are never overwritten.",
         "data": {
-          "name": "Friendly name"
+          "name": "Friendly name",
+          "speed_count": "Number of fan speeds"
         }
       },
       "user": {
@@ -13,7 +14,8 @@
         "description": "Enter the MAC address of your fan. You can find it using a BLE scanner app \u2014 look for a device named CeilingFan.",
         "data": {
           "mac": "MAC address",
-          "name": "Friendly name"
+          "name": "Friendly name",
+          "speed_count": "Number of fan speeds"
         }
       }
     },
