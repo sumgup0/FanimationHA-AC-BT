@@ -1,6 +1,3 @@
-# *** I forked the original code to add support for 6, 16 and 32 speed Fanimation fans. ***
-
-
 # FanimationHA-AC-BT
 
 [Home Assistant](https://www.home-assistant.io/) HACS custom component for **local Bluetooth control** of Fanimation ceiling fans using the BTCR9 FanSync Bluetooth receiver. No cloud, no app dependency. Includes the fully reverse-engineered BLE protocol and diagnostic tools.
