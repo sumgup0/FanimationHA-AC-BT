@@ -8,7 +8,7 @@ The BTCR9 BLE protocol has been fully reverse-engineered and verified against re
 
 | Feature | Range | Status |
 |---------|-------|--------|
-| Fan speed | Off / Low / Medium / High | Verified |
+| Fan speed | Off + 1-N (N is configurable per fan, default 3, max 99) | Verified on 3-speed AC; 6/32-speed DC support added in 1.2.0 (community-tested) |
 | Fan direction | Forward / Reverse | Not supported on AC motors |
 | Downlight brightness | 0-100% | Verified |
 | Sleep timer | 0-360 minutes | Verified |
@@ -40,12 +40,13 @@ Three entities per fan, grouped under one device:
 
 | Entity | Type | Controls |
 |--------|------|----------|
-| Fan | `fan` | Speed (off/low/med/high) |
+| Fan | `fan` | Speed slider with N discrete steps (N is your fan's speed count) |
 | Downlight | `light` | On/off, brightness (0-100%) |
 | Sleep Timer | `number` | 0-360 minutes (turns off fan + light on expiry) |
 
 Per-fan options are configurable via **Settings → Devices → Configure** ([screenshot](docs/screenshots/options-flow.png)):
-- **Default turn-on speed** — Last used, Low, Medium, or High
+- **Number of fan speeds** — pick a common value (1, 3, 6, 32) or type a custom number. Low/Medium/High and the slider scale automatically.
+- **Default turn-on speed** — Last used, Low, Medium, or High (Low/Medium/High map proportionally to your fan's speed count)
 - **Default light brightness** — 0 = last used, 1-100 = fixed level
 - **Disconnect notification** — persistent alert on first BLE failure
 - **Unavailable threshold** — how many poll failures before entities go grey
@@ -94,7 +95,14 @@ Find your fan's MAC address using any BLE scanner app (nRF Connect, LightBlue) �
 - **BLE receiver**: Fanimation BTCR9 FanSync Bluetooth Receiver
 - **Physical remote**: Fanimation BTT9 (3 speeds, downlight, no reverse)
 - **Smartphone app**: FanSync (Android / iOS)
-- **Motor type**: AC (3-speed capacitor-switched)
+- **Motor type**: AC (3-speed capacitor-switched) — fully tested
+
+### DC motor fans (community-tested in 1.2.0)
+
+DC fan models with the FanSync Bluetooth receiver expose more discrete speeds. Set **Number of fan speeds** to match your fan during setup (or change it later in options). Reported working:
+
+- **Fanimation Odyn 84"** with TR305 FanSync remote — 32 speeds
+- Other DC models commonly use 6 or 32 speeds — pick the matching value or type a custom number (1-99)
 
 Other Fanimation FanSync Bluetooth models likely share the same protocol but have not been tested.
 

@@ -5,7 +5,11 @@
         "title": "Fanimation Ceiling Fan Detected",
         "description": "Found: {name} ({mac})\n\nThis fan can also be controlled by its RF remote. All commands from Home Assistant will read the current fan state first, so remote changes are never overwritten.",
         "data": {
-          "name": "Friendly name"
+          "name": "Friendly name",
+          "speed_count": "Number of fan speeds"
+        },
+        "data_description": {
+          "speed_count": "Pick or type the number of speeds your fan supports. AC fans are usually 3; DC fans are commonly 6 or 32. You can change this later in the integration's options."
         }
       },
       "user": {
@@ -13,7 +17,11 @@
         "description": "Enter the MAC address of your fan. You can find it using a BLE scanner app \u2014 look for a device named CeilingFan.",
         "data": {
           "mac": "MAC address",
-          "name": "Friendly name"
+          "name": "Friendly name",
+          "speed_count": "Number of fan speeds"
+        },
+        "data_description": {
+          "speed_count": "Pick or type the number of speeds your fan supports. AC fans are usually 3; DC fans are commonly 6 or 32. You can change this later in the integration's options."
         }
       }
     },
@@ -35,11 +43,13 @@
             "name": "Fan & light defaults",
             "description": "These settings control what happens when you turn on the fan or light without specifying a speed or brightness (e.g., tapping a toggle in your dashboard).",
             "data": {
+              "speed_count": "Number of fan speeds",
               "default_speed": "Default turn-on speed",
               "default_brightness": "Default light brightness"
             },
             "data_description": {
-              "default_speed": "The fan speed used when you turn the fan on without choosing a specific speed.",
+              "speed_count": "How many discrete speeds your fan supports. AC fans are usually 3; DC fans are commonly 6 or 32. Pick a common value or type a custom number.",
+              "default_speed": "The fan speed used when you turn the fan on without choosing a specific speed. Low/Medium/High scale automatically based on the speed count above.",
               "default_brightness": "The brightness used when you turn the light on without choosing a specific level. Set to 0 to use the last brightness."
             }
           },

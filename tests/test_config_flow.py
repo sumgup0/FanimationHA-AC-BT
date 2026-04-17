@@ -29,7 +29,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.fanimation.const import DOMAIN
+from custom_components.fanimation.const import CONF_SPEED_COUNT, DOMAIN
 
 from .conftest import TEST_MAC, TEST_NAME
 
@@ -146,13 +146,14 @@ class TestBluetoothDiscovery:
             # Submit the confirmation form with a custom name
             result = await hass.config_entries.flow.async_configure(
                 result["flow_id"],
-                user_input={CONF_NAME: "Office Fan"},
+                user_input={CONF_NAME: "Office Fan", CONF_SPEED_COUNT: "3"},
             )
 
         assert result["type"] is FlowResultType.CREATE_ENTRY
         assert result["title"] == "Office Fan"
         assert result["data"][CONF_MAC] == TEST_MAC
         assert result["data"][CONF_NAME] == "Office Fan"
+        assert result["data"][CONF_SPEED_COUNT] == 3  # coerced to int by schema
 
     async def test_discovery_not_fanimation_aborts(self, hass: HomeAssistant) -> None:
         """Discovery of a non-Fanimation device should abort."""
@@ -224,12 +225,14 @@ class TestManualEntry:
                 user_input={
                     CONF_MAC: TEST_MAC,
                     CONF_NAME: TEST_NAME,
+                    CONF_SPEED_COUNT: "6",
                 },
             )
 
         assert result["type"] is FlowResultType.CREATE_ENTRY
         assert result["title"] == TEST_NAME
         assert result["data"][CONF_MAC] == TEST_MAC.upper()
+        assert result["data"][CONF_SPEED_COUNT] == 6
 
     async def test_manual_unreachable_device_shows_error(self, hass: HomeAssistant) -> None:
         """Unreachable device should show cannot_connect error."""
@@ -247,6 +250,7 @@ class TestManualEntry:
                 user_input={
                     CONF_MAC: TEST_MAC,
                     CONF_NAME: TEST_NAME,
+                    CONF_SPEED_COUNT: "3",
                 },
             )
 
@@ -275,6 +279,7 @@ class TestManualEntry:
                 user_input={
                     CONF_MAC: TEST_MAC,
                     CONF_NAME: TEST_NAME,
+                    CONF_SPEED_COUNT: "3",
                 },
             )
 
@@ -347,6 +352,7 @@ class TestDuplicatePrevention:
                 user_input={
                     CONF_MAC: TEST_MAC,
                     CONF_NAME: TEST_NAME,
+                    CONF_SPEED_COUNT: "3",
                 },
             )
 
