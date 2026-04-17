@@ -26,9 +26,11 @@ from .const import (
     CONF_DEFAULT_BRIGHTNESS,
     CONF_DEFAULT_SPEED,
     CONF_NOTIFY_ON_DISCONNECT,
+    CONF_SPEED_COUNT,
     CONF_UNAVAILABLE_THRESHOLD,
     DEFAULT_BRIGHTNESS_LAST_USED,
     DEFAULT_NOTIFY_ON_DISCONNECT,
+    DEFAULT_SPEED_COUNT,
     DEFAULT_SPEED_HIGH,
     DEFAULT_SPEED_LAST_USED,
     DEFAULT_SPEED_LOW,
@@ -36,10 +38,36 @@ from .const import (
     DEFAULT_UNAVAILABLE_THRESHOLD,
     DOMAIN,
     LOGGER,
+    MAX_SPEED_COUNT,
     MAX_UNAVAILABLE_THRESHOLD,
+    MIN_SPEED_COUNT,
+    SPEED_COUNT_COMMON,
 )
 
 SERVICE_UUID = "0000e000-0000-1000-8000-00805f9b34fb"
+
+
+def _speed_count_field() -> vol.All:
+    """Voluptuous validator for the speed-count form field.
+
+    Renders as a dropdown of common values (1, 3, 6, 32) with ``custom_value=True``
+    so users with unusual hardware can type any integer in [MIN, MAX]. Selector
+    returns a string, so we coerce to int and range-check before persisting.
+
+    Callers must pass form ``default`` values as ``str`` (e.g. ``str(DEFAULT_SPEED_COUNT)``)
+    because the underlying SelectSelector compares defaults against its string options.
+    """
+    return vol.All(
+        SelectSelector(
+            SelectSelectorConfig(
+                options=SPEED_COUNT_COMMON,
+                custom_value=True,
+                mode=SelectSelectorMode.DROPDOWN,
+            )
+        ),
+        vol.Coerce(int),
+        vol.Range(min=MIN_SPEED_COUNT, max=MAX_SPEED_COUNT),
+    )
 
 
 class FanimationConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -132,6 +160,7 @@ class FanimationConfigFlow(ConfigFlow, domain=DOMAIN):
                 data={
                     CONF_MAC: self._mac,
                     CONF_NAME: name,
+                    CONF_SPEED_COUNT: user_input[CONF_SPEED_COUNT],
                 },
             )
 
@@ -144,6 +173,7 @@ class FanimationConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema(
                 {
                     vol.Required(CONF_NAME, default=self._discovered_name): str,
+                    vol.Required(CONF_SPEED_COUNT, default=str(DEFAULT_SPEED_COUNT)): _speed_count_field(),
                 }
             ),
         )
@@ -170,6 +200,7 @@ class FanimationConfigFlow(ConfigFlow, domain=DOMAIN):
                     data={
                         CONF_MAC: mac,
                         CONF_NAME: name,
+                        CONF_SPEED_COUNT: user_input[CONF_SPEED_COUNT],
                     },
                 )
 
@@ -182,6 +213,7 @@ class FanimationConfigFlow(ConfigFlow, domain=DOMAIN):
                         vol.Match(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"),
                     ),
                     vol.Required(CONF_NAME, default="Fanimation Fan"): str,
+                    vol.Required(CONF_SPEED_COUNT, default=str(DEFAULT_SPEED_COUNT)): _speed_count_field(),
                 }
             ),
             errors=errors,
@@ -223,8 +255,16 @@ class FanimationOptionsFlow(OptionsFlowWithConfigEntry):
 
     def _defaults_section_schema(self) -> vol.Schema:
         """Build schema for fan & light defaults section."""
+        current_speed_count = self.options.get(
+            CONF_SPEED_COUNT,
+            self.config_entry.data.get(CONF_SPEED_COUNT, DEFAULT_SPEED_COUNT),
+        )
         return vol.Schema(
             {
+                vol.Required(
+                    CONF_SPEED_COUNT,
+                    default=str(current_speed_count),
+                ): _speed_count_field(),
                 vol.Required(
                     CONF_DEFAULT_SPEED,
                     default=self.options.get(CONF_DEFAULT_SPEED, DEFAULT_SPEED_LAST_USED),

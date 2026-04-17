@@ -23,9 +23,11 @@ from custom_components.fanimation.const import (
     CONF_DEFAULT_BRIGHTNESS,
     CONF_DEFAULT_SPEED,
     CONF_NOTIFY_ON_DISCONNECT,
+    CONF_SPEED_COUNT,
     CONF_UNAVAILABLE_THRESHOLD,
     DEFAULT_BRIGHTNESS_LAST_USED,
     DEFAULT_NOTIFY_ON_DISCONNECT,
+    DEFAULT_SPEED_COUNT,
     DEFAULT_SPEED_LAST_USED,
     DEFAULT_UNAVAILABLE_THRESHOLD,
     DOMAIN,
@@ -82,6 +84,7 @@ class TestOptionsFlow:
             result["flow_id"],
             user_input={
                 "defaults": {
+                    CONF_SPEED_COUNT: "32",
                     CONF_DEFAULT_SPEED: "medium",
                     CONF_DEFAULT_BRIGHTNESS: 75,
                 },
@@ -92,6 +95,7 @@ class TestOptionsFlow:
             },
         )
         assert result["type"] is FlowResultType.CREATE_ENTRY
+        assert mock_entry.options[CONF_SPEED_COUNT] == 32  # coerced to int
         assert mock_entry.options[CONF_DEFAULT_SPEED] == "medium"
         assert mock_entry.options[CONF_DEFAULT_BRIGHTNESS] == 75
         assert mock_entry.options[CONF_NOTIFY_ON_DISCONNECT] is False
@@ -106,6 +110,7 @@ class TestOptionsFlow:
             result["flow_id"],
             user_input={
                 "defaults": {
+                    CONF_SPEED_COUNT: str(DEFAULT_SPEED_COUNT),
                     CONF_DEFAULT_SPEED: DEFAULT_SPEED_LAST_USED,
                     CONF_DEFAULT_BRIGHTNESS: DEFAULT_BRIGHTNESS_LAST_USED,
                 },
@@ -116,5 +121,6 @@ class TestOptionsFlow:
             },
         )
         assert result["type"] is FlowResultType.CREATE_ENTRY
+        assert mock_entry.options[CONF_SPEED_COUNT] == DEFAULT_SPEED_COUNT
         assert mock_entry.options[CONF_DEFAULT_SPEED] == DEFAULT_SPEED_LAST_USED
         assert mock_entry.options[CONF_DEFAULT_BRIGHTNESS] == DEFAULT_BRIGHTNESS_LAST_USED
