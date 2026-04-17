@@ -8,6 +8,7 @@ Pure unit tests — no HA test harness required. Cover:
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -25,14 +26,24 @@ from custom_components.fanimation.device import FanimationState
 
 
 def _make_fan(default_speed: str = DEFAULT_SPEED_LAST_USED, speed_count: int = 3):
-    """Create a FanimationFan with mocked coordinator and entry for unit testing."""
+    """Create a FanimationFan with mocked coordinator and entry for unit testing.
+
+    ``async_set_state`` echoes the requested speed back as a ``FanimationState`` so
+    that ``_last_speed`` bookkeeping (which now reads from the verified response)
+    behaves as it would against real hardware that accepts the command. Tests that
+    need to simulate firmware rejection or comm failure should override the mock
+    with their own ``return_value``.
+    """
     from custom_components.fanimation.fan import FanimationFan
+
+    async def _echo_state(speed: int | None = None, **_kwargs: Any) -> FanimationState:
+        return FanimationState(speed=speed if speed is not None else 0)
 
     mock_coordinator = MagicMock()
     mock_coordinator.device = MagicMock()
     mock_coordinator.device.mac = "AA:BB:CC:DD:EE:FF"
     mock_coordinator.device.name = "Test Fan"
-    mock_coordinator.device.async_set_state = AsyncMock()
+    mock_coordinator.device.async_set_state = AsyncMock(side_effect=_echo_state)
     mock_coordinator.async_start_fast_poll = AsyncMock()
     mock_coordinator.data = FanimationState(speed=0)
     mock_coordinator.connection_failures = 0
@@ -195,3 +206,61 @@ class TestIssue1Regression:
         fan, mock_coord = _make_fan(speed_count=3)
         mock_coord.data = FanimationState(speed=2)
         assert fan.percentage == 66
+
+
+class TestLastSpeedBookkeeping:
+    """Regression: ``_last_speed`` must reflect what the *hardware accepted*, not
+    what we *asked for*. If the firmware silently rejects an out-of-range speed
+    (BTT9 on a 3-speed fan treats SPEED bytes >= 4 as off), pinning ``_last_speed``
+    to the rejected value puts ``async_turn_on`` into a stuck-off loop: every
+    "Last Used" turn-on resends the bad value and the fan stays off.
+    """
+
+    @pytest.mark.asyncio
+    async def test_last_speed_not_updated_when_hardware_reports_off(self) -> None:
+        """speed_count=6 misconfig on 3-speed fan: requested 5, fan reports off."""
+        fan, mock_coord = _make_fan(speed_count=6)
+        fan._last_speed = SPEED_MED  # last known good
+        mock_coord.device.async_set_state = AsyncMock(
+            return_value=FanimationState(speed=0)  # firmware silently rejected
+        )
+
+        await fan.async_set_percentage(83)  # → raw speed=5
+
+        # Must NOT be pinned to the rejected value, or "Last Used" turn-on will
+        # resend speed=5 forever and the fan will stay off.
+        assert fan._last_speed == SPEED_MED
+
+    @pytest.mark.asyncio
+    async def test_last_speed_synced_to_verified_response(self) -> None:
+        """Successful command: ``_last_speed`` reflects what hardware confirmed."""
+        fan, mock_coord = _make_fan(speed_count=3)
+        mock_coord.device.async_set_state = AsyncMock(return_value=FanimationState(speed=SPEED_MED))
+
+        await fan.async_set_percentage(66)  # → raw speed=2
+
+        assert fan._last_speed == SPEED_MED
+
+    @pytest.mark.asyncio
+    async def test_last_speed_not_updated_on_communication_failure(self) -> None:
+        """If ``async_set_state`` returns None (BLE error), keep prior _last_speed."""
+        fan, mock_coord = _make_fan(speed_count=3)
+        fan._last_speed = SPEED_HIGH
+        mock_coord.device.async_set_state = AsyncMock(return_value=None)
+
+        await fan.async_set_percentage(33)
+
+        assert fan._last_speed == SPEED_HIGH
+
+    @pytest.mark.asyncio
+    async def test_turn_off_does_not_clobber_last_speed(self) -> None:
+        """Turning off must not reset ``_last_speed`` to 0 — turn_on needs it."""
+        fan, mock_coord = _make_fan(speed_count=3)
+        fan._last_speed = SPEED_MED
+        # Hardware reports off after explicit turn-off (this is the normal case).
+        mock_coord.device.async_set_state = AsyncMock(return_value=FanimationState(speed=0))
+
+        await fan.async_turn_off()
+
+        # Still SPEED_MED so a subsequent "Last Used" turn-on goes back to medium.
+        assert fan._last_speed == SPEED_MED
