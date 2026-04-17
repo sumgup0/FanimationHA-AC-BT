@@ -130,8 +130,16 @@ class FanimationFan(FanimationEntity, FanEntity):
         await self._async_set_speed(speed)
 
     async def _async_set_speed(self, speed: int) -> None:
-        """Set fan speed and trigger fast poll."""
-        if speed > SPEED_OFF:
-            self._last_speed = speed
-        await self.coordinator.device.async_set_state(speed=speed)
+        """Set fan speed and trigger fast poll.
+
+        ``_last_speed`` is updated from the *verified* response, not the requested
+        value. If speed_count is misconfigured (e.g. set to 6 on a 3-speed fan),
+        the firmware silently turns off when it receives a SPEED byte it can't
+        honour. Pinning ``_last_speed`` to the rejected value would put
+        ``async_turn_on`` (with default = "Last Used") into a stuck-off loop:
+        every toggle resends the bad value and the fan stays off.
+        """
+        state = await self.coordinator.device.async_set_state(speed=speed)
+        if state is not None and state.speed > SPEED_OFF:
+            self._last_speed = state.speed
         await self.coordinator.async_start_fast_poll()
