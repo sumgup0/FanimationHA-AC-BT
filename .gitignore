@@ -30,3 +30,16 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+
+# Local Claude agent state (project memory, local settings)
+.claude/
+
+# Playwright MCP browser-automation screenshots
+.playwright-mcp/
+
+# Source PNG assets (pre-resize originals — final assets live in brand_images/)
+/icon_raw.png
+/logo_raw.png
+
+# Accidental Windows "nul" file from shell redirects
+/nul
