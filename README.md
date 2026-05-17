@@ -51,18 +51,10 @@ Three entities per fan, grouped under one device:
 | Downlight | `light` | On/off, brightness (0-100%) |
 | Sleep Timer | `number` | 0-360 minutes (turns off fan + light on expiry); the slider is hidden when set to 0 |
 
-Per-fan options are configurable via **Settings → Devices → Configure**:
+Per-fan options are configurable via **Settings → Devices → Configure** ([screenshot](docs/screenshots/options-flow.png)):
 
-![Per-fan options dialog](docs/screenshots/options-flow.png)
-
-- **Number of fan speeds** — pick a common value (1, 3, 6, 32) or type a custom number. Low/Medium/High and the slider scale automatically.
-
-  ![Speed count dropdown](docs/screenshots/options-flow-speed-count-dropdown.png)
-
-- **Default turn-on speed** — Last used, Low, Medium, or High (Low/Medium/High map proportionally to your fan's speed count).
-
-  ![Default turn-on speed dropdown](docs/screenshots/options-flow-default-speed-dropdown.png)
-
+- **Number of fan speeds** — pick a common value (1, 3, 6, 32) or type a custom number. Low/Medium/High and the slider scale automatically. ([dropdown](docs/screenshots/options-flow-speed-count-dropdown.png))
+- **Default turn-on speed** — Last used, Low, Medium, or High (Low/Medium/High map proportionally to your fan's speed count). ([dropdown](docs/screenshots/options-flow-default-speed-dropdown.png))
 - **Default light brightness** — 0 = last used, 1-100 = fixed level
 - **Disconnect notification** — persistent alert on first BLE failure
 - **Unavailable threshold** — how many poll failures before entities go grey
