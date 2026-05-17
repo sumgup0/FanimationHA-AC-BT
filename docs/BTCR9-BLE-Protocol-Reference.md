@@ -203,18 +203,22 @@ The byte layout is identical to SET_STATE except byte[1] is `0x32` instead of `0
 
 ## 7. Fan Speed
 
-| Value | Speed | Physical behavior |
-|-------|-------|-------------------|
-| 0 | Off | Motor stops |
-| 1 | Low | Slowest speed |
-| 2 | Medium | Medium speed |
-| 3 | High | Fastest speed |
-| 4-6 | — | Accepted by BLE chip, echoed in response, but **no physical motor response** (AC motor only has 3 speeds) |
-| 7+ | — | Not tested |
+| Value | Behavior |
+|-------|----------|
+| 0 | Off — motor stops |
+| 1 | Lowest speed |
+| 2 to N-1 | Intermediate speed steps |
+| N | Highest speed supported by the connected motor |
+| N+1 or higher | **Silently turns the fan off** — see [Gotchas: Out-of-Range Speed](#out-of-range-speed-silently-turns-fan-off) |
 
-The BTCR9 uses an AC motor with a capacitor-switched speed control, which physically limits it to 3 speeds. The DC fan variant of this protocol supports speeds up to 10.
+The maximum usable speed (N) depends on the specific fan. Reference points from real hardware:
 
-**Recommendation**: Only use values 0-3 for the BTCR9.
+- **3-speed AC fan with BTCR9 + BTT9 remote** (maintainer): N=3
+- **Fanimation Odyn 84" DC fan with TR305 remote** (community-tested in v1.2.0): N=32
+
+Other Fanimation BLE fans likely fall somewhere in this range. The Home Assistant integration's per-fan "Number of fan speeds" option lets you tell it which value to use for N.
+
+**Recommendation**: Match the configured speed count to your fan's hardware capability. Setting it higher than the motor supports causes the fan to turn off when the slider crosses the threshold (see the gotcha below).
 
 ---
 
@@ -225,9 +229,9 @@ The BTCR9 uses an AC motor with a capacitor-switched speed control, which physic
 | 0 | Forward | Standard airflow direction (default) |
 | 1 | Reverse | Reversed airflow |
 
-**⚠️ NOT SUPPORTED on AC motor models.** Testing on BTCR9 hardware with an AC motor confirmed that the direction byte is accepted in SET_STATE but has no physical effect — the fan continues spinning in the same direction. The verification GET_STATUS always returns direction=0 (forward) regardless of the value sent. The BTT9 physical remote also has no reverse button.
+**⚠️ NOT SUPPORTED on the AC motor tested for this integration.** Testing on BTCR9 hardware with a capacitor-switched AC motor confirmed that the direction byte is accepted in SET_STATE but has no physical effect — the fan continues spinning in the same direction. The verification GET_STATUS always returns direction=0 (forward) regardless of the value sent. The BTT9 physical remote also has no reverse button.
 
-The direction byte likely only works on Fanimation DC motor models that support electronic reverse. AC motors require a physical DPDT switch on the motor housing to change direction.
+The direction byte likely works on Fanimation DC motor models that support electronic reverse, but this has not yet been confirmed by community testing. Capacitor-switched AC motors require a physical DPDT switch on the motor housing to change direction.
 
 The Home Assistant integration does not expose direction control. The direction byte is always preserved from the current GET_STATUS response during read-before-write operations.
 
@@ -314,17 +318,21 @@ When you send a SET_STATE command, the fan immediately responds with a STATUS_RE
 
 **Always follow SET_STATE with GET_STATUS to verify the actual fan state.**
 
+### Out-of-Range Speed Silently Turns Fan Off
+
+If you send a SPEED byte higher than the connected motor's physical maximum (for example, SPEED=5 on a 3-speed fan), the BTCR9 acknowledges the BLE write normally, but the verification GET_STATUS returns SPEED=0 — the fan turns off. There is no error code or rejection signal; the misconfigured value just looks like an off command after the fact.
+
+This caused a "stuck-off loop": a fan configured for too many speeds in Home Assistant would resend the over-range value on every "Last Used" turn-on, keeping itself permanently off. The fix (included in v1.2.0) is to make "Number of fan speeds" configurable per fan, and to read `_last_speed` from the verified GET_STATUS response rather than from the requested value.
+
+**Implication for any code talking to the BTCR9**: read your "what speed did the fan actually accept" value from the GET_STATUS-verified response, never from the requested value.
+
 ### Single BLE Connection
 
 The BTCR9 only accepts one BLE connection at a time. If the FanSync app is connected, your script cannot connect, and vice versa. Make sure to disconnect one before connecting the other.
 
-### Direction Change Does Not Work on AC Motors
+### Direction Change Does Not Work on the Tested AC Motor
 
-The direction byte (byte[3]) is accepted in SET_STATE but has no physical effect on AC motor models. The BLE chip echoes the value in the SET_STATE response, but the verification GET_STATUS always returns 0 (forward). This feature likely only works on Fanimation DC motor fans. See [Section 8: Direction](#8-direction) for details.
-
-### Speed Values 4-6 Are Ghosts
-
-The BLE chip accepts speed values 4-6 and echoes them in responses, but the AC motor ignores them. The fan continues at whatever speed it was previously set to. Only values 0-3 have a physical effect.
+The direction byte (byte[3]) is accepted in SET_STATE but has no physical effect on the capacitor-switched AC motor tested for this integration. The BLE chip echoes the value in the SET_STATE response, but the verification GET_STATUS always returns 0 (forward). This feature likely works on Fanimation DC motor fans but has not yet been confirmed by community testing. See [Section 8: Direction](#8-direction) for details.
 
 ### RF Remote and BLE Are Independent
 

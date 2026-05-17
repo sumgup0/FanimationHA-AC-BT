@@ -1,5 +1,10 @@
 # FanimationHA-AC-BT
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Home Assistant 2024.12+](https://img.shields.io/badge/Home%20Assistant-2024.12%2B-blue.svg)](https://www.home-assistant.io/)
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://hacs.xyz/)
+[![Hardware: Fanimation](https://img.shields.io/badge/Hardware-Fanimation-green.svg)](#compatible-hardware)
+
 [Home Assistant](https://www.home-assistant.io/) HACS custom component for **local Bluetooth control** of Fanimation ceiling fans using the BTCR9 FanSync Bluetooth receiver. No cloud, no app dependency. Includes the fully reverse-engineered BLE protocol and diagnostic tools.
 
 ## What Works
@@ -8,12 +13,12 @@ The BTCR9 BLE protocol has been fully reverse-engineered and verified against re
 
 | Feature | Range | Status |
 |---------|-------|--------|
-| Fan speed | Off + 1-N (N is configurable per fan, default 3, max 99) | Verified on 3-speed AC; 6/32-speed DC support added in 1.2.0 (community-tested) |
+| Fan speed | Off + 1-N (N is configurable per fan, default 3, max 99) | Verified on 3-speed AC fans (maintainer + community) and 6- and 32-speed DC fans (community-tested in 1.2.0) |
 | Fan direction | Forward / Reverse | Not supported on AC motors |
 | Downlight brightness | 0-100% | Verified |
 | Sleep timer | 0-360 minutes | Verified |
 
-> **Note on direction:** The BLE protocol includes a direction byte, but AC motor fans (like those using the BTCR9 + BTT9 remote) do not support electronic direction change. The byte is accepted but has no physical effect. AC fan direction is controlled by a physical switch on the motor housing. DC motor Fanimation fans may support this feature.
+> **Note on direction:** The BLE protocol includes a direction byte, but the AC motor fans tested for this integration (capacitor-switched, using the BTCR9 + BTT9 remote) do not support electronic direction change — the byte is accepted but has no physical effect. Capacitor-switched AC fans change direction via a physical switch on the motor housing. DC motor Fanimation fans likely support electronic reverse, but this has not yet been confirmed by community testing.
 
 ## Installation (Home Assistant)
 
@@ -36,17 +41,28 @@ The BTCR9 BLE protocol has been fully reverse-engineered and verified against re
 
 Three entities per fan, grouped under one device:
 
-![Fan entities in Home Assistant](docs/screenshots/fan-entities.png)
+| With a sleep timer running | At rest |
+|---|---|
+| ![Fan entities — timer running](docs/screenshots/fan-entities.png) | ![Fan entities — no timer set](docs/screenshots/fan-entities-no-timer-slider.png) |
 
 | Entity | Type | Controls |
 |--------|------|----------|
 | Fan | `fan` | Speed slider with N discrete steps (N is your fan's speed count) |
 | Downlight | `light` | On/off, brightness (0-100%) |
-| Sleep Timer | `number` | 0-360 minutes (turns off fan + light on expiry) |
+| Sleep Timer | `number` | 0-360 minutes (turns off fan + light on expiry); the slider is hidden when set to 0 |
 
-Per-fan options are configurable via **Settings → Devices → Configure** ([screenshot](docs/screenshots/options-flow.png)):
+Per-fan options are configurable via **Settings → Devices → Configure**:
+
+![Per-fan options dialog](docs/screenshots/options-flow.png)
+
 - **Number of fan speeds** — pick a common value (1, 3, 6, 32) or type a custom number. Low/Medium/High and the slider scale automatically.
-- **Default turn-on speed** — Last used, Low, Medium, or High (Low/Medium/High map proportionally to your fan's speed count)
+
+  ![Speed count dropdown](docs/screenshots/options-flow-speed-count-dropdown.png)
+
+- **Default turn-on speed** — Last used, Low, Medium, or High (Low/Medium/High map proportionally to your fan's speed count).
+
+  ![Default turn-on speed dropdown](docs/screenshots/options-flow-default-speed-dropdown.png)
+
 - **Default light brightness** — 0 = last used, 1-100 = fixed level
 - **Disconnect notification** — persistent alert on first BLE failure
 - **Unavailable threshold** — how many poll failures before entities go grey
@@ -97,18 +113,17 @@ Find your fan's MAC address using any BLE scanner app (nRF Connect, LightBlue) �
 - **Smartphone app**: FanSync (Android / iOS)
 - **Motor type**: AC (3-speed capacitor-switched) — fully tested
 
-### DC motor fans (community-tested in 1.2.0)
+### Fans with more than 3 speeds (community-tested in 1.2.0)
 
-DC fan models with the FanSync Bluetooth receiver expose more discrete speeds. Set **Number of fan speeds** to match your fan during setup (or change it later in options). Reported working:
+Fanimation BLE fans with more than 3 discrete speeds — typically DC models — are also supported as of 1.2.0. Set **Number of fan speeds** to match your fan during setup (or change it later in options). Community-tested by @JesusSanchezLopez across 4 AC and DC fans on his setup (Issue #1), including:
 
-- **Fanimation Odyn 84"** with TR305 FanSync remote — 32 speeds
-- Other DC models commonly use 6 or 32 speeds — pick the matching value or type a custom number (1-99)
+- **Fanimation Odyn 84"** DC fan with TR305 FanSync remote — 32 speeds
 
-Other Fanimation FanSync Bluetooth models likely share the same protocol but have not been tested.
+Other Fanimation FanSync Bluetooth models likely share the same protocol; if yours works (or doesn't), open an issue with the model name and speed count.
 
 ## Project History
 
-Originally inspired by [toddhutch/SimpleFanController](https://github.com/toddhutch/SimpleFanController), which targeted DC Bluetooth fans using Java/TinyB. The original code is preserved in `legacy/` for reference. This project is a ground-up rewrite in Python/bleak targeting the BTCR9 AC motor variant as a Home Assistant integration.
+Originally inspired by [toddhutch/SimpleFanController](https://github.com/toddhutch/SimpleFanController), which targeted DC Bluetooth fans using Java/TinyB. This project is a ground-up rewrite in Python/bleak for the Fanimation BTCR9 FanSync BLE receiver as a Home Assistant integration.
 
 ## License
 
