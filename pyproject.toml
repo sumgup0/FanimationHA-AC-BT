@@ -28,3 +28,15 @@ ignore = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+
+[tool.mypy]
+# Foundation for the Platinum `strict-typing` rule. Run locally with:
+#   mypy custom_components/fanimation
+# A CI mypy job is added once every module — including the in-flux config flow
+# and fan platform (parked behind issues #4/#5) — type-checks clean under strict.
+python_version = "3.13"
+strict = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+disallow_untyped_defs = true
+exclude = "tests/"
