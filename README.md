@@ -61,6 +61,16 @@ Per-fan options are configurable via **Settings → Devices → Configure** ([sc
 
 Works with ESP32 Bluetooth proxies — no special configuration needed.
 
+## Removing the integration
+
+1. In Home Assistant, go to **Settings → Devices & Services**.
+2. Find the **Fanimation BLE Ceiling Fan** entry, open its three-dot menu, and choose **Delete**. Home Assistant unloads the integration — stopping Bluetooth polling and disconnecting from the fan — and removes its device and entities automatically.
+3. *(Optional)* To remove the code as well:
+   - **HACS install:** open **HACS → Fanimation BLE Ceiling Fan**, three-dot menu → **Remove**, then restart Home Assistant.
+   - **Manual install:** delete the `custom_components/fanimation/` folder and restart Home Assistant.
+
+The integration keeps everything local — no cloud account, no data stored outside Home Assistant — so deleting the entry leaves nothing behind online or on the fan. The fan continues to work with its physical RF remote.
+
 ## Protocol Reference
 
 See **[docs/BTCR9-BLE-Protocol-Reference.md](docs/BTCR9-BLE-Protocol-Reference.md)** for the complete protocol documentation, including:

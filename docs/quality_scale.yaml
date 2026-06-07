@@ -1,0 +1,117 @@
+# Home Assistant Integration Quality Scale — progress tracker.
+#
+# STAGED IN docs/ ON PURPOSE. hassfest validates quality_scale.yaml when it
+# lives in the integration directory and fails CI if manifest.json declares a
+# tier whose rules are not all `done`/`exempt`. Until the tiers are green this
+# file is kept out of custom_components/fanimation/ so the Validate workflow
+# stays green.
+#
+# CAPSTONE STEP (per tier, once its rules are all done/exempt):
+#   1. git mv docs/quality_scale.yaml custom_components/fanimation/quality_scale.yaml
+#   2. add  "quality_scale": "<tier>"  to manifest.json
+#
+# Status values: done | todo | exempt
+# https://developers.home-assistant.io/docs/core/integration-quality-scale/
+
+rules:
+  # ---------------------------------------------------------------- Bronze ---
+  action-setup:
+    status: exempt
+    comment: Provides entities only; registers no service actions.
+  appropriate-polling: done
+  brands:
+    status: exempt
+    comment: Custom (HACS) integration; brand assets are bundled, not in home-assistant/brands.
+  common-modules: done
+  config-flow-test-coverage: done
+  config-flow: done
+  dependency-transparency: done
+  docs-actions:
+    status: exempt
+    comment: No service actions.
+  docs-high-level-description: done
+  docs-installation-instructions: done
+  docs-removal-instructions: done  # all Bronze rules now done/exempt
+  entity-event-setup: done
+  entity-unique-id: done
+  has-entity-name: done
+  runtime-data: done
+  test-before-configure: done
+  test-before-setup: done
+  unique-config-entry: done
+
+  # ---------------------------------------------------------------- Silver ---
+  action-exceptions: done
+  config-entry-unloading: done
+  docs-configuration-parameters:
+    status: todo
+    comment: Document each options-flow parameter in user docs.
+  docs-installation-parameters:
+    status: todo
+    comment: Document the MAC / name / speed-count setup fields in user docs.
+  entity-unavailable: done
+  integration-owner: done
+  log-when-unavailable: done
+  parallel-updates:
+    status: todo
+    comment: light + number done; fan platform's PARALLEL_UPDATES lands with the #4 fan work.
+  reauthentication-flow:
+    status: exempt
+    comment: Local BLE device with no credentials or auth.
+  test-coverage:
+    status: todo
+    comment: Measure and reach >95% across all modules.
+
+  # ------------------------------------------------------------------ Gold ---
+  devices: done
+  diagnostics: done
+  discovery: done
+  discovery-update-info:
+    status: todo
+    comment: Refresh device info from Bluetooth re-discovery.
+  docs-data-update:
+    status: todo
+  docs-examples:
+    status: todo
+  docs-known-limitations:
+    status: todo
+    comment: Document AC-vs-DC direction and the timer-needs-fan-running rule.
+  docs-supported-devices: done
+  docs-supported-functions: done
+  docs-troubleshooting:
+    status: todo
+  docs-use-cases:
+    status: todo
+  dynamic-devices:
+    status: exempt
+    comment: One physical device per config entry.
+  entity-category:
+    status: todo
+    comment: Decision pending — sleep timer is an operational control (leaning no category); revisit whether EntityCategory.CONFIG fits.
+  entity-device-class: done
+  entity-disabled-by-default:
+    status: exempt
+    comment: All three entities are primary controls.
+  entity-translations: done
+  exception-translations:
+    status: todo
+    comment: Make the sleep-timer HomeAssistantError translatable.
+  icon-translations: done
+  reconfiguration-flow:
+    status: todo
+    comment: Add async_step_reconfigure to change MAC / name without re-adding.
+  repair-issues:
+    status: todo
+    comment: Raise a repair issue when speed_count is misconfigured.
+  stale-devices:
+    status: exempt
+    comment: One physical device per config entry.
+
+  # -------------------------------------------------------------- Platinum ---
+  async-dependency: done
+  inject-websession:
+    status: exempt
+    comment: BLE transport; there is no HTTP session to inject.
+  strict-typing:
+    status: todo
+    comment: py.typed and mypy config added; flow and fan modules still need full typing and a CI mypy job.
