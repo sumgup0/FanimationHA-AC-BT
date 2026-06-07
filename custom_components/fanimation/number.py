@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from homeassistant.components.number import NumberEntity, NumberMode
+from homeassistant.components.number import NumberDeviceClass, NumberEntity, NumberMode
 from homeassistant.const import UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
@@ -16,6 +16,10 @@ from .entity import FanimationEntity
 
 if TYPE_CHECKING:
     from .coordinator import FanimationCoordinator
+
+# Serialise commands: every BLE write goes through the shared device-level lock,
+# so one in-flight command at a time matches HA's BLE convention.
+PARALLEL_UPDATES = 1
 
 
 async def async_setup_entry(
@@ -31,7 +35,7 @@ async def async_setup_entry(
 class FanimationTimer(FanimationEntity, NumberEntity):
     """Fanimation sleep timer entity."""
 
-    _attr_icon = "mdi:timer-outline"
+    _attr_device_class = NumberDeviceClass.DURATION
     _attr_mode = NumberMode.SLIDER
     _attr_native_min_value = TIMER_MIN
     _attr_native_max_value = TIMER_MAX

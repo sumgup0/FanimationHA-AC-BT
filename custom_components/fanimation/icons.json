@@ -1,0 +1,9 @@
+{
+  "entity": {
+    "number": {
+      "sleep_timer": {
+        "default": "mdi:timer-outline"
+      }
+    }
+  }
+}
