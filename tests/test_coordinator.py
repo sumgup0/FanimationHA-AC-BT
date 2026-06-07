@@ -7,7 +7,7 @@ logic. They run on all platforms (no HA test harness required).
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -208,3 +208,59 @@ class TestPersistentNotification:
         await coordinator._async_update_data()
 
         mock_hass.services.async_call.assert_not_called()
+
+
+class TestLogWhenUnavailable:
+    """Silver `log-when-unavailable`: warn once on loss, log once on recovery.
+
+    The old code warned on every failed poll, so a fan that was unreachable for
+    a day produced ~288 identical warnings. These tests pin the once-each
+    behaviour and the hand-off to HA's own logging on hard escalation.
+    """
+
+    @pytest.mark.asyncio
+    async def test_warns_once_across_many_soft_failures(self) -> None:
+        coordinator, mock_device, _ = _make_coordinator(unavailable_threshold=0)
+        coordinator.data = FanimationState(speed=1)
+        mock_device.async_get_status.side_effect = Exception("BLE timeout")
+
+        with patch("custom_components.fanimation.coordinator.LOGGER") as logger:
+            for _ in range(5):
+                await coordinator._async_update_data()
+
+        # One warning despite five failed polls; the rest drop to debug.
+        assert logger.warning.call_count == 1
+        assert coordinator._unavailable_logged is True
+
+    @pytest.mark.asyncio
+    async def test_logs_recovery_once(self) -> None:
+        coordinator, mock_device, _ = _make_coordinator(unavailable_threshold=0)
+        coordinator.data = FanimationState(speed=1)
+        mock_device.async_get_status.side_effect = Exception("BLE timeout")
+        for _ in range(3):
+            await coordinator._async_update_data()
+
+        mock_device.async_get_status.side_effect = None
+        mock_device.async_get_status.return_value = FanimationState(speed=2)
+        with patch("custom_components.fanimation.coordinator.LOGGER") as logger:
+            await coordinator._async_update_data()
+
+        logger.info.assert_called_once()
+        assert coordinator._unavailable_logged is False
+
+    @pytest.mark.asyncio
+    async def test_hard_escalation_hands_off_logging(self) -> None:
+        from homeassistant.helpers.update_coordinator import UpdateFailed
+
+        coordinator, mock_device, _ = _make_coordinator(unavailable_threshold=2)
+        coordinator.data = FanimationState(speed=1)
+        mock_device.async_get_status.side_effect = Exception("BLE timeout")
+
+        await coordinator._async_update_data()  # soft failure 1 → warned
+        assert coordinator._unavailable_logged is True
+
+        with pytest.raises(UpdateFailed):
+            await coordinator._async_update_data()  # failure 2 = threshold → hard
+
+        # Flag reset so HA's coordinator owns subsequent loss/recovery logging.
+        assert coordinator._unavailable_logged is False
