@@ -27,6 +27,7 @@
     },
     "error": {
       "cannot_connect": "Could not connect to the fan. Make sure it is powered on and within Bluetooth range.",
+      "invalid_mac": "That doesn't look like a MAC address. Use the form AA:BB:CC:DD:EE:FF (colons, dashes, or no separator all work).",
       "unknown": "An unexpected error occurred."
     },
     "abort": {

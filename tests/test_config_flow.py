@@ -234,6 +234,63 @@ class TestManualEntry:
         assert result["data"][CONF_MAC] == TEST_MAC.upper()
         assert result["data"][CONF_SPEED_COUNT] == 6
 
+    async def test_manual_invalid_mac_shows_error(self, hass: HomeAssistant) -> None:
+        """Garbled MAC input should re-show the form with invalid_mac error.
+
+        Regression guard for Issue #5: validation runs in the handler, not in
+        the voluptuous schema (vol.Match was not JSON-serializable and broke
+        form rendering entirely).
+        """
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_USER},
+        )
+
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_MAC: "not-a-mac-address",
+                CONF_NAME: TEST_NAME,
+                CONF_SPEED_COUNT: "3",
+            },
+        )
+
+        assert result["type"] is FlowResultType.FORM
+        assert result["errors"] == {CONF_MAC: "invalid_mac"}
+
+    async def test_manual_accepts_dash_separated_mac(self, hass: HomeAssistant) -> None:
+        """Dash-separated MAC should be normalized and accepted."""
+        with (
+            patch(
+                "custom_components.fanimation.config_flow.bluetooth.async_ble_device_from_address",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "custom_components.fanimation.config_flow.establish_connection",
+            ) as mock_conn,
+        ):
+            mock_client = AsyncMock()
+            mock_client.services = _mock_services_with_chars()
+            mock_client.disconnect = AsyncMock()
+            mock_conn.return_value = mock_client
+
+            result = await hass.config_entries.flow.async_init(
+                DOMAIN,
+                context={"source": config_entries.SOURCE_USER},
+            )
+
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                user_input={
+                    CONF_MAC: TEST_MAC.replace(":", "-"),
+                    CONF_NAME: TEST_NAME,
+                    CONF_SPEED_COUNT: "3",
+                },
+            )
+
+        assert result["type"] is FlowResultType.CREATE_ENTRY
+        assert result["data"][CONF_MAC] == TEST_MAC.upper()
+
     async def test_manual_unreachable_device_shows_error(self, hass: HomeAssistant) -> None:
         """Unreachable device should show cannot_connect error."""
         with patch(

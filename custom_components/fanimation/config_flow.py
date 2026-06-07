@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import voluptuous as vol
@@ -11,6 +12,7 @@ from homeassistant.components.bluetooth import BluetoothServiceInfoBleak
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlowWithConfigEntry
 from homeassistant.const import CONF_MAC, CONF_NAME
 from homeassistant.data_entry_flow import section
+from homeassistant.helpers.device_registry import format_mac
 from homeassistant.helpers.selector import (
     NumberSelector,
     NumberSelectorConfig,
@@ -45,6 +47,9 @@ from .const import (
 )
 
 SERVICE_UUID = "0000e000-0000-1000-8000-00805f9b34fb"
+
+# Canonical MAC form after format_mac() normalization: lowercase colon-separated.
+_MAC_RE = re.compile(r"^([0-9a-f]{2}:){5}[0-9a-f]{2}$")
 
 
 def _speed_count_field() -> vol.All:
@@ -179,39 +184,47 @@ class FanimationConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Handle manual setup."""
+        """Handle manual setup.
+
+        MAC validation runs in the handler, not in the voluptuous schema:
+        ``vol.Match`` is not JSON-serializable by ``voluptuous_serialize`` and
+        causes the frontend to error when rendering the form (Issue #5).
+        Accepting ``str`` in the schema and validating here also lets us
+        normalize colon/dash/dot/bare-hex input via ``format_mac``.
+        """
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            mac = user_input[CONF_MAC].upper()
-            name = user_input[CONF_NAME]
-
-            # Set unique ID to prevent duplicates
-            await self.async_set_unique_id(mac)
-            self._abort_if_unique_id_configured()
-
-            # Test-before-configure: verify the device is reachable
-            # and has the expected GATT characteristics
-            if not await self._async_validate_device(mac):
-                errors["base"] = "cannot_connect"
+            normalized = format_mac(user_input[CONF_MAC].strip())
+            if not _MAC_RE.match(normalized):
+                errors[CONF_MAC] = "invalid_mac"
             else:
-                return self.async_create_entry(
-                    title=name,
-                    data={
-                        CONF_MAC: mac,
-                        CONF_NAME: name,
-                        CONF_SPEED_COUNT: user_input[CONF_SPEED_COUNT],
-                    },
-                )
+                mac = normalized.upper()
+                name = user_input[CONF_NAME]
+
+                # Set unique ID to prevent duplicates
+                await self.async_set_unique_id(mac)
+                self._abort_if_unique_id_configured()
+
+                # Test-before-configure: verify the device is reachable
+                # and has the expected GATT characteristics
+                if not await self._async_validate_device(mac):
+                    errors["base"] = "cannot_connect"
+                else:
+                    return self.async_create_entry(
+                        title=name,
+                        data={
+                            CONF_MAC: mac,
+                            CONF_NAME: name,
+                            CONF_SPEED_COUNT: user_input[CONF_SPEED_COUNT],
+                        },
+                    )
 
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_MAC): vol.All(
-                        str,
-                        vol.Match(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"),
-                    ),
+                    vol.Required(CONF_MAC): str,
                     vol.Required(CONF_NAME, default="Fanimation Fan"): str,
                     vol.Required(CONF_SPEED_COUNT, default=str(DEFAULT_SPEED_COUNT)): _speed_count_field(),
                 }
