@@ -73,6 +73,16 @@ This integration is in the **HACS default store**, so no custom repository is ne
 2. Restart Home Assistant.
 3. Add the integration via **Settings → Devices & Services**.
 
+## Removing the integration
+
+1. In Home Assistant, go to **Settings → Devices & Services**.
+2. Find the **Fanimation BLE Ceiling Fan** entry, open its three-dot menu, and choose **Delete**. Home Assistant unloads the integration — stopping Bluetooth polling and disconnecting from the fan — and removes its device and entities automatically.
+3. *(Optional)* To remove the code as well:
+   - **HACS:** open **HACS → Fanimation BLE Ceiling Fan**, three-dot menu → **Remove**, then restart Home Assistant.
+   - **Manual install:** delete the `custom_components/fanimation/` folder and restart Home Assistant.
+
+Everything stays local — no cloud account, no data stored outside Home Assistant — so deleting the entry leaves nothing behind online or on the fan. The fan continues to work with its physical RF remote.
+
 ## Compatibility
 
 This integration talks to the fan's **Bluetooth receiver**, so it should work with any Fanimation ceiling fan that uses a **BTCR9-class FanSync Bluetooth receiver** — regardless of the specific fan model, motor type, or speed count. The hardware listed below is what has been **tested**; treat it as confirmed examples, not an exhaustive list.
