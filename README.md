@@ -33,6 +33,7 @@ Per-fan options are configurable via **Settings → Devices → Configure** ([sc
 - **Number of fan speeds** — pick a common value (1, 3, 6, 32) or type a custom number. Low/Medium/High and the slider scale automatically. ([dropdown](docs/screenshots/options-flow-speed-count-dropdown.png))
 - **Default turn-on speed** — Last used, Low, Medium, or High (Low/Medium/High map proportionally to your fan's speed count). ([dropdown](docs/screenshots/options-flow-default-speed-dropdown.png))
 - **Default light brightness** — 0 = last used, 1-100 = fixed level
+- **Change direction** — adds a forward/reverse control; auto-on for DC fans, off for AC. Turn on manually if your fan supports electronic direction control which wasn't detected by the integration.
 - **Disconnect notification** — persistent alert on first BLE failure
 - **Unavailable threshold** — how many poll failures before entities go grey
 
@@ -43,7 +44,7 @@ The BTCR9 BLE protocol has been reverse-engineered and verified on real AC hardw
 | Feature | Range | Status |
 |---------|-------|--------|
 | Fan speed | Off, then 1 up to your fan's max speed (set speed count in options — default 3, up to 99) | Verified on 3-speed AC and 6- & 32-speed DC fans |
-| Fan direction | Forward / Reverse | Not exposed in 1.2.1 — community testing in progress ([#4](https://github.com/sumgup0/FanimationHA-AC-BT/issues/4)) |
+| Fan direction | Forward / Reverse | DC fans auto-detected and option is shown by default ([#4](https://github.com/sumgup0/FanimationHA-AC-BT/issues/4)), but can toggle in per-fan settings |
 | Downlight brightness | 0–100% | Verified |
 | Sleep timer | 0–360 minutes | Verified |
 
@@ -85,7 +86,7 @@ This integration talks to the fan's **Bluetooth receiver**, so it should work wi
 
 - Tested on a **3-speed capacitor-switched AC motor**. AC fans with different speed counts should also work — set **Number of fan speeds** in options to match.
 - **DC motors** (e.g. 6- and 32-speed) are community-tested and supported.
-- **Direction / reverse**: the specific AC fan tested does not change direction electronically (it reverses via a physical switch on the motor housing). Other fans — particularly DC models — may support electronic reverse; that's being investigated in [Issue #4](https://github.com/sumgup0/FanimationHA-AC-BT/issues/4). Direction control is not exposed in 1.2.1.
+- **Direction / reverse**: DC motors reverse electronically, and the integration **auto-detects** them (via the `fan_type` byte) to show a forward/reverse control — with a **Change direction** toggle in options to override. The tested AC fan does not reverse electronically (it uses a physical switch on the motor housing), so the control stays hidden for AC but can be overridden in options. Confirmed on real DC hardware in [Issue #4](https://github.com/sumgup0/FanimationHA-AC-BT/issues/4).
 
 **Known-working fans:**
 
