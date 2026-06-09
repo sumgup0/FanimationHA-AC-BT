@@ -32,6 +32,7 @@
     },
     "abort": {
       "already_configured": "This fan is already configured.",
+      "already_in_progress": "This fan is already being set up (it was auto-discovered). Finish or cancel that setup instead of adding it manually.",
       "not_fanimation": "This device does not appear to be a Fanimation fan (expected GATT characteristics not found)."
     }
   },
