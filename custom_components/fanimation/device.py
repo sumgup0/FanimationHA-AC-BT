@@ -176,6 +176,7 @@ class FanimationDevice:
     async def async_set_state(
         self,
         speed: int | None = None,
+        direction: int | None = None,
         downlight: int | None = None,
         timer_minutes: int | None = None,
     ) -> FanimationState | None:
@@ -184,9 +185,10 @@ class FanimationDevice:
         Only the provided fields are changed; all others are preserved
         from the current fan state (read via GET_STATUS first).
 
-        Note: Direction is not exposed — AC motor fans with the BTCR9
-        controller do not support electronic direction change. The
-        direction byte is always preserved from the current state.
+        ``direction`` is only ever passed by the fan entity when the user has a
+        reverse-capable fan (DC). AC callers omit it, so the current direction
+        byte is preserved untouched — AC behaviour is identical to having no
+        direction control at all.
         """
         async with self._lock:
             await self._ensure_connected()
@@ -205,16 +207,17 @@ class FanimationDevice:
 
             # Merge: use provided values, fall back to current state
             new_speed = speed if speed is not None else current.speed
+            new_direction = direction if direction is not None else current.direction
             new_downlight = downlight if downlight is not None else current.downlight
             new_timer = timer_minutes if timer_minutes is not None else current.timer_minutes
             timer_hi = (new_timer >> 8) & 0xFF
             timer_lo = new_timer & 0xFF
 
-            # Send SET_STATE (direction always preserved from current state)
+            # Send SET_STATE (direction preserved unless a reverse-capable caller set it)
             set_packet = self._build_packet(
                 CMD_SET_STATE,
                 speed=new_speed,
-                direction=current.direction,
+                direction=new_direction,
                 uplight=0,
                 downlight=new_downlight,
                 timer_hi=timer_hi,

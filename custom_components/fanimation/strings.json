@@ -45,12 +45,14 @@
             "data": {
               "speed_count": "Number of fan speeds",
               "default_speed": "Default turn-on speed",
-              "default_brightness": "Default light brightness"
+              "default_brightness": "Default light brightness",
+              "supports_reverse": "Show a reverse-direction control"
             },
             "data_description": {
               "speed_count": "How many discrete speeds your fan supports. AC fans are usually 3; DC fans are commonly 6 or 32. Pick a common value or type a custom number.",
               "default_speed": "The fan speed used when you turn the fan on without choosing a specific speed. Low/Medium/High scale automatically based on the speed count above.",
-              "default_brightness": "The brightness used when you turn the light on without choosing a specific level. Set to 0 to use the last brightness."
+              "default_brightness": "The brightness used when you turn the light on without choosing a specific level. Set to 0 to use the last brightness.",
+              "supports_reverse": "Adds a forward/reverse control to the fan. Defaults on for DC fans that reverse electronically and off for AC fans (which change direction with a switch on the motor). Turn it on manually if your DC fan wasn't auto-detected."
             }
           },
           "connection": {

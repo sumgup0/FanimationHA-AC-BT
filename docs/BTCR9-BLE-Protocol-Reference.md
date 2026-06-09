@@ -134,7 +134,7 @@ Field:  START  CMD    SPEED   DIR    UPLIGHT  DOWNLIGHT TIMER_HI  TIMER_LO  FANT
 | 5 | DOWNLIGHT | Downlight brightness: 0=off, 1-100=percent |
 | 6 | TIMER_HI | Sleep timer high byte (big-endian, in minutes) |
 | 7 | TIMER_LO | Sleep timer low byte (big-endian, in minutes) |
-| 8 | FANTYPE | Fan type selector (unused on BTCR9, always 0) |
+| 8 | FANTYPE | Fan type / motor class: `0` on the tested AC fan, `2` on a community-tested DC fan (see [Direction](#8-direction)) |
 | 9 | CHECKSUM | `sum(bytes[0] through bytes[8]) & 0xFF` |
 
 ### Checksum Calculation
@@ -229,11 +229,11 @@ Other Fanimation BLE fans likely fall somewhere in this range. The Home Assistan
 | 0 | Forward | Standard airflow direction (default) |
 | 1 | Reverse | Reversed airflow |
 
-**⚠️ NOT SUPPORTED on the AC motor tested for this integration.** Testing on BTCR9 hardware with a capacitor-switched AC motor confirmed that the direction byte is accepted in SET_STATE but has no physical effect — the fan continues spinning in the same direction. The verification GET_STATUS always returns direction=0 (forward) regardless of the value sent. The BTT9 physical remote also has no reverse button.
+**Motor-dependent — works on DC motors, not on the tested AC motor.** On a capacitor-switched **AC** motor (`fan_type`=0) the direction byte is accepted in SET_STATE but has no physical effect: the fan keeps spinning the same way and a follow-up GET_STATUS returns direction=0 (forward) regardless of the value sent. The BTT9 physical remote also has no reverse button. AC motors change direction with a physical DPDT switch on the motor housing.
 
-The direction byte likely works on Fanimation DC motor models that support electronic reverse, but this has not yet been confirmed by community testing. Capacitor-switched AC motors require a physical DPDT switch on the motor housing to change direction.
+On a **DC** motor (`fan_type`=2) electronic reverse works: community testing (#4) confirmed the blades physically reverse — instantly, whether the fan is stopped or spinning — and GET_STATUS reads the new direction back reliably in byte[3].
 
-The Home Assistant integration does not expose direction control. The direction byte is always preserved from the current GET_STATUS response during read-before-write operations.
+The Home Assistant integration exposes a direction control for fans detected as reverse-capable (`fan_type`=2), with an options toggle to override the auto-detection. For AC fans the direction byte is preserved untouched from the current GET_STATUS during read-before-write.
 
 ---
 
@@ -330,9 +330,9 @@ This caused a "stuck-off loop": a fan configured for too many speeds in Home Ass
 
 The BTCR9 only accepts one BLE connection at a time. If the FanSync app is connected, your script cannot connect, and vice versa. Make sure to disconnect one before connecting the other.
 
-### Direction Change Does Not Work on the Tested AC Motor
+### Direction Change Is Motor-Dependent
 
-The direction byte (byte[3]) is accepted in SET_STATE but has no physical effect on the capacitor-switched AC motor tested for this integration. The BLE chip echoes the value in the SET_STATE response, but the verification GET_STATUS always returns 0 (forward). This feature likely works on Fanimation DC motor fans but has not yet been confirmed by community testing. See [Section 8: Direction](#8-direction) for details.
+The direction byte (byte[3]) works on DC motors but not on the capacitor-switched AC motor tested for this integration. On the AC fan (`fan_type`=0) the BLE chip echoes the value in the SET_STATE response, but a follow-up GET_STATUS reverts to 0 (forward) — no physical effect. On a community-tested DC fan (`fan_type`=2) the blades physically reverse and GET_STATUS reads the new value back. See [Section 8: Direction](#8-direction) for details.
 
 ### RF Remote and BLE Are Independent
 
@@ -414,10 +414,10 @@ The following protocol fields exist in the packet format but have not been verif
 | Byte | Field | Notes |
 |------|-------|-------|
 | 4 | Uplight | The BLE chip accepts values 0-255 and echoes them, but the BTCR9 has no uplight fixture. May work on Fanimation models with an uplight. |
-| 8 | Fan Type | Purpose unknown. Always 0 in all observed responses. May select between AC/DC motor behavior on multi-mode receivers. |
+| 8 | Fan Type | Motor class: `0` on the tested AC fan, `2` on a community-tested DC fan. Appears to gate electronic reverse (DC only) — see [Direction](#8-direction). |
 | — | Timer range >360 | The FanSync app limits the timer to 360 minutes (6 hours). Values above 360 have not been tested. |
 | — | OAD Service | The TI OAD (Over-the-Air Download) firmware update service is present but has not been tested. Do not interact with it unless you know what you are doing. |
 
 ---
 
-*This protocol was reverse-engineered from the [SimpleFanController](https://github.com/toddhutch/SimpleFanController) Java/TinyB project (targeting DC fans) and verified against BTCR9 AC motor hardware using Python/bleak diagnostic scripts. All findings are based on empirical testing — no official Fanimation documentation was used.*
+*This protocol was reverse-engineered from the [SimpleFanController](https://github.com/toddhutch/SimpleFanController) Java/TinyB project (targeting DC fans) and verified against BTCR9 AC motor hardware — plus community DC-motor testing (#4) — using Python/bleak diagnostic scripts. All findings are based on empirical testing; no official Fanimation documentation was used.*

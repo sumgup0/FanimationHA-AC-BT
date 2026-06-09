@@ -14,11 +14,11 @@ The BTCR9 BLE protocol has been fully reverse-engineered and verified against re
 | Feature | Range | Status |
 |---------|-------|--------|
 | Fan speed | Off + 1-N (N is configurable per fan, default 3, max 99) | Verified on 3-speed AC fans (maintainer + community) and 6- and 32-speed DC fans (community-tested in 1.2.0) |
-| Fan direction | Forward / Reverse | Not supported on AC motors |
+| Fan direction | Forward / Reverse | **AC:** not supported. **DC:** auto-detected and shown by default (toggle in options) |
 | Downlight brightness | 0-100% | Verified |
 | Sleep timer | 0-360 minutes | Verified |
 
-> **Note on direction:** The BLE protocol includes a direction byte, but the AC motor fans tested for this integration (capacitor-switched, using the BTCR9 + BTT9 remote) do not support electronic direction change — the byte is accepted but has no physical effect. Capacitor-switched AC fans change direction via a physical switch on the motor housing. DC motor Fanimation fans likely support electronic reverse, but this has not yet been confirmed by community testing.
+> **Note on direction:** AC motor fans (capacitor-switched) change direction with a physical switch on the motor — the BLE byte has no effect — so the control stays hidden. DC motor fans reverse electronically; the integration detects them and shows a forward/reverse control that responds instantly. Override the auto-detection with **Show a reverse-direction control** under **Settings → Devices → Configure**. Thanks to @markjandejong for confirming DC reverse on real hardware (#4); see the [protocol reference](docs/BTCR9-BLE-Protocol-Reference.md#8-direction) for the `fan_type` detail.
 
 ## Installation (Home Assistant)
 
@@ -56,6 +56,7 @@ Per-fan options are configurable via **Settings → Devices → Configure** ([sc
 - **Number of fan speeds** — pick a common value (1, 3, 6, 32) or type a custom number. Low/Medium/High and the slider scale automatically. ([dropdown](docs/screenshots/options-flow-speed-count-dropdown.png))
 - **Default turn-on speed** — Last used, Low, Medium, or High (Low/Medium/High map proportionally to your fan's speed count). ([dropdown](docs/screenshots/options-flow-default-speed-dropdown.png))
 - **Default light brightness** — 0 = last used, 1-100 = fixed level
+- **Show a reverse-direction control** — adds a forward/reverse control; auto-on for DC fans, off for AC. Turn on manually if your DC fan wasn't detected
 - **Disconnect notification** — persistent alert on first BLE failure
 - **Unavailable threshold** — how many poll failures before entities go grey
 
@@ -103,7 +104,7 @@ Find your fan's MAC address using any BLE scanner app (nRF Connect, LightBlue) �
 - **BLE receiver**: Fanimation BTCR9 FanSync Bluetooth Receiver
 - **Physical remote**: Fanimation BTT9 (3 speeds, downlight, no reverse)
 - **Smartphone app**: FanSync (Android / iOS)
-- **Motor type**: AC (3-speed capacitor-switched) — fully tested
+- **Motor type**: AC (capacitor-switched) — fully tested; DC (electronic reverse) — confirmed by community testing (#4)
 
 ### Fans with more than 3 speeds (community-tested in 1.2.0)
 

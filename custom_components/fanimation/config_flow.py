@@ -27,6 +27,7 @@ from .const import (
     CONF_DEFAULT_SPEED,
     CONF_NOTIFY_ON_DISCONNECT,
     CONF_SPEED_COUNT,
+    CONF_SUPPORTS_REVERSE,
     CONF_UNAVAILABLE_THRESHOLD,
     DEFAULT_BRIGHTNESS_LAST_USED,
     DEFAULT_NOTIFY_ON_DISCONNECT,
@@ -42,6 +43,7 @@ from .const import (
     MAX_UNAVAILABLE_THRESHOLD,
     MIN_SPEED_COUNT,
     SPEED_COUNT_COMMON,
+    fan_type_supports_reverse,
 )
 
 SERVICE_UUID = "0000e000-0000-1000-8000-00805f9b34fb"
@@ -259,6 +261,11 @@ class FanimationOptionsFlow(OptionsFlowWithConfigEntry):
             CONF_SPEED_COUNT,
             self.config_entry.data.get(CONF_SPEED_COUNT, DEFAULT_SPEED_COUNT),
         )
+        # Default the reverse toggle from the detected fan type (ON only for
+        # confirmed-reversible DC fans), read from the live coordinator state.
+        coordinator = getattr(self.config_entry, "runtime_data", None)
+        data = getattr(coordinator, "data", None)
+        detected_reverse = data is not None and fan_type_supports_reverse(data.fan_type)
         return vol.Schema(
             {
                 vol.Required(
@@ -284,6 +291,10 @@ class FanimationOptionsFlow(OptionsFlowWithConfigEntry):
                     CONF_DEFAULT_BRIGHTNESS,
                     default=self.options.get(CONF_DEFAULT_BRIGHTNESS, DEFAULT_BRIGHTNESS_LAST_USED),
                 ): NumberSelector(NumberSelectorConfig(min=0, max=100, step=1, mode=NumberSelectorMode.SLIDER)),
+                vol.Required(
+                    CONF_SUPPORTS_REVERSE,
+                    default=self.options.get(CONF_SUPPORTS_REVERSE, detected_reverse),
+                ): bool,
             }
         )
 
