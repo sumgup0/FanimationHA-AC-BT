@@ -34,6 +34,18 @@ SPEED_LOW = 1
 SPEED_MED = 2
 SPEED_HIGH = 3
 
+# Direction (protocol byte[3])
+DIR_FORWARD = 0
+DIR_REVERSE = 1
+
+# fan_type (protocol byte[8]) values observed so far: AC capacitor-switched fans
+# report 0 (the direction byte is accepted but has no physical effect) and DC
+# fans report 2 (electronic reverse works, verified). The reverse-direction
+# control therefore defaults ON only for the confirmed-reversible DC value;
+# every other fan_type defaults OFF and can be enabled manually. Refine as more
+# samples arrive — diagnostics captures byte[8].
+REVERSIBLE_FAN_TYPE = 2
+
 # Speed count is per-fan and user-configurable (AC fans typically 3, DC fans 6/32).
 # Common values surfaced as dropdown options; users can type any int in [MIN, MAX].
 DEFAULT_SPEED_COUNT = 3
@@ -60,6 +72,7 @@ CONF_DEFAULT_BRIGHTNESS = "default_brightness"
 CONF_NOTIFY_ON_DISCONNECT = "notify_on_disconnect"
 CONF_UNAVAILABLE_THRESHOLD = "unavailable_threshold"
 CONF_SPEED_COUNT = "speed_count"
+CONF_SUPPORTS_REVERSE = "supports_reverse"
 
 # Option defaults
 DEFAULT_SPEED_LAST_USED = "last_used"
@@ -86,3 +99,12 @@ def speed_for_preset(preset: str, count: int) -> int | None:
     if preset == DEFAULT_SPEED_HIGH:
         return count
     return None
+
+
+def fan_type_supports_reverse(fan_type: int) -> bool:
+    """Return True for fan types known to reverse electronically (DC motors).
+
+    Used to default the opt-in reverse-direction control: ON for the confirmed
+    DC value, OFF for AC (0) and any not-yet-seen type. The user can override.
+    """
+    return fan_type == REVERSIBLE_FAN_TYPE

@@ -12,20 +12,30 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from homeassistant.components.fan import DIRECTION_FORWARD, DIRECTION_REVERSE, FanEntityFeature
 
 from custom_components.fanimation.const import (
     CONF_DEFAULT_SPEED,
     CONF_SPEED_COUNT,
+    CONF_SUPPORTS_REVERSE,
     DEFAULT_SPEED_LAST_USED,
+    DIR_FORWARD,
+    DIR_REVERSE,
     SPEED_HIGH,
     SPEED_LOW,
     SPEED_MED,
+    fan_type_supports_reverse,
     speed_for_preset,
 )
 from custom_components.fanimation.device import FanimationState
 
 
-def _make_fan(default_speed: str = DEFAULT_SPEED_LAST_USED, speed_count: int = 3):
+def _make_fan(
+    default_speed: str = DEFAULT_SPEED_LAST_USED,
+    speed_count: int = 3,
+    fan_type: int = 0,
+    supports_reverse: bool | None = None,
+):
     """Create a FanimationFan with mocked coordinator and entry for unit testing.
 
     ``async_set_state`` echoes the requested speed back as a ``FanimationState`` so
@@ -33,11 +43,19 @@ def _make_fan(default_speed: str = DEFAULT_SPEED_LAST_USED, speed_count: int = 3
     behaves as it would against real hardware that accepts the command. Tests that
     need to simulate firmware rejection or comm failure should override the mock
     with their own ``return_value``.
+
+    ``fan_type`` seeds the coordinator state (0 = AC, 2 = DC) so the entity's
+    reverse auto-detection can be exercised; ``supports_reverse`` (when not None)
+    sets the options override.
     """
     from custom_components.fanimation.fan import FanimationFan
 
     async def _echo_state(speed: int | None = None, **_kwargs: Any) -> FanimationState:
         return FanimationState(speed=speed if speed is not None else 0)
+
+    options: dict[str, Any] = {CONF_DEFAULT_SPEED: default_speed}
+    if supports_reverse is not None:
+        options[CONF_SUPPORTS_REVERSE] = supports_reverse
 
     mock_coordinator = MagicMock()
     mock_coordinator.device = MagicMock()
@@ -45,15 +63,15 @@ def _make_fan(default_speed: str = DEFAULT_SPEED_LAST_USED, speed_count: int = 3
     mock_coordinator.device.name = "Test Fan"
     mock_coordinator.device.async_set_state = AsyncMock(side_effect=_echo_state)
     mock_coordinator.async_start_fast_poll = AsyncMock()
-    mock_coordinator.data = FanimationState(speed=0)
+    mock_coordinator.data = FanimationState(speed=0, fan_type=fan_type)
     mock_coordinator.connection_failures = 0
     mock_coordinator.config_entry = MagicMock()
-    mock_coordinator.config_entry.options = {CONF_DEFAULT_SPEED: default_speed}
+    mock_coordinator.config_entry.options = dict(options)
     mock_coordinator.config_entry.entry_id = "test_entry"
 
     mock_entry = MagicMock()
     mock_entry.entry_id = "test_entry"
-    mock_entry.options = {CONF_DEFAULT_SPEED: default_speed}
+    mock_entry.options = dict(options)
     mock_entry.data = {CONF_SPEED_COUNT: speed_count}
 
     fan = FanimationFan(mock_coordinator, mock_entry)
@@ -264,3 +282,61 @@ class TestLastSpeedBookkeeping:
 
         # Still SPEED_MED so a subsequent "Last Used" turn-on goes back to medium.
         assert fan._last_speed == SPEED_MED
+
+
+class TestFanTypeReverseDetection:
+    """The reverse heuristic: only the confirmed DC fan_type (2) is reversible."""
+
+    @pytest.mark.parametrize(("fan_type", "expected"), [(2, True), (0, False), (1, False), (3, False)])
+    def test_helper(self, fan_type: int, expected: bool) -> None:
+        assert fan_type_supports_reverse(fan_type) is expected
+
+
+class TestIssue4Direction:
+    """Issue #4: opt-in reverse direction, auto-defaulting ON only for DC fans.
+
+    AC fans (fan_type 0) hide the control; DC fans (fan_type 2) show it by
+    default; the options toggle overrides either way. Reverse is instant — the
+    hardware probe confirmed DC fans reverse while stopped or spinning.
+    """
+
+    def test_direction_hidden_for_ac_fan(self) -> None:
+        fan, _ = _make_fan(fan_type=0)
+        assert not (fan.supported_features & FanEntityFeature.DIRECTION)
+
+    def test_direction_auto_shown_for_dc_fan(self) -> None:
+        fan, _ = _make_fan(fan_type=2)
+        assert fan.supported_features & FanEntityFeature.DIRECTION
+
+    def test_option_forces_on_for_undetected_fan(self) -> None:
+        fan, _ = _make_fan(fan_type=0, supports_reverse=True)
+        assert fan.supported_features & FanEntityFeature.DIRECTION
+
+    def test_option_forces_off_for_detected_fan(self) -> None:
+        fan, _ = _make_fan(fan_type=2, supports_reverse=False)
+        assert not (fan.supported_features & FanEntityFeature.DIRECTION)
+
+    def test_current_direction_mapping(self) -> None:
+        fan, coord = _make_fan(fan_type=2)
+        coord.data = FanimationState(speed=1, direction=DIR_REVERSE, fan_type=2)
+        assert fan.current_direction == DIRECTION_REVERSE
+        coord.data = FanimationState(speed=1, direction=DIR_FORWARD, fan_type=2)
+        assert fan.current_direction == DIRECTION_FORWARD
+
+    def test_current_direction_none_without_data(self) -> None:
+        fan, coord = _make_fan(fan_type=2)
+        coord.data = None
+        assert fan.current_direction is None
+
+    @pytest.mark.asyncio
+    async def test_set_direction_reverse_sends_command(self) -> None:
+        fan, coord = _make_fan(fan_type=2)
+        await fan.async_set_direction(DIRECTION_REVERSE)
+        coord.device.async_set_state.assert_called_once_with(direction=DIR_REVERSE)
+        coord.async_start_fast_poll.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_set_direction_forward_sends_command(self) -> None:
+        fan, coord = _make_fan(fan_type=2)
+        await fan.async_set_direction(DIRECTION_FORWARD)
+        coord.device.async_set_state.assert_called_once_with(direction=DIR_FORWARD)
