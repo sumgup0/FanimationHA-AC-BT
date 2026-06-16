@@ -54,6 +54,19 @@ SERVICE_UUID = "0000e000-0000-1000-8000-00805f9b34fb"
 _MAC_RE = re.compile(r"^([0-9a-f]{2}:){5}[0-9a-f]{2}$")
 
 
+def _normalize_mac(raw: str) -> str | None:
+    """Normalise user MAC input to canonical uppercase colon form, or None if invalid.
+
+    Accepts colon / dash / dot / bare-hex via ``format_mac``; validates the result
+    against ``_MAC_RE`` before upper-casing. Shared by ``async_step_user`` and
+    ``async_step_reconfigure`` so the validation lives in one place.
+    """
+    normalized = format_mac(raw.strip())
+    if not _MAC_RE.match(normalized):
+        return None
+    return normalized.upper()
+
+
 def _speed_count_field() -> vol.All:
     """Voluptuous validator for the speed-count form field.
 
@@ -197,11 +210,10 @@ class FanimationConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            normalized = format_mac(user_input[CONF_MAC].strip())
-            if not _MAC_RE.match(normalized):
+            mac = _normalize_mac(user_input[CONF_MAC])
+            if mac is None:
                 errors[CONF_MAC] = "invalid_mac"
             else:
-                mac = normalized.upper()
                 name = user_input[CONF_NAME]
 
                 # Set unique ID to prevent duplicates
