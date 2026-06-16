@@ -94,5 +94,10 @@
         "name": "Sleep timer"
       }
     }
+  },
+  "exceptions": {
+    "timer_requires_fan_on": {
+      "message": "The sleep timer only works when the fan is running. Turn the fan on first, then set the timer."
+    }
   }
 }

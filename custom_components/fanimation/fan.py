@@ -35,6 +35,10 @@ from .const import (
 from .coordinator import FanimationCoordinator
 from .entity import FanimationEntity
 
+# Serialise commands: every BLE write goes through the shared device-level lock,
+# so one in-flight command at a time matches HA's BLE convention.
+PARALLEL_UPDATES = 1
+
 
 async def async_setup_entry(
     hass: HomeAssistant,

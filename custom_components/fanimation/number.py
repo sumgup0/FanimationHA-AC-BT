@@ -11,7 +11,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import FanimationConfigEntry
-from .const import TIMER_MAX, TIMER_MIN
+from .const import DOMAIN, TIMER_MAX, TIMER_MIN
 from .entity import FanimationEntity
 
 if TYPE_CHECKING:
@@ -35,6 +35,9 @@ async def async_setup_entry(
 class FanimationTimer(FanimationEntity, NumberEntity):
     """Fanimation sleep timer entity."""
 
+    # No entity_category: this is a primary operational control with live state
+    # (remaining minutes) that turns the fan + light off on expiry — not a static
+    # CONFIG knob or a read-only DIAGNOSTIC readout.
     _attr_device_class = NumberDeviceClass.DURATION
     _attr_mode = NumberMode.SLIDER
     _attr_native_min_value = TIMER_MIN
@@ -77,7 +80,8 @@ class FanimationTimer(FanimationEntity, NumberEntity):
         """
         if int(value) > 0 and self.coordinator.data and self.coordinator.data.speed == 0:
             raise HomeAssistantError(
-                "The sleep timer only works when the fan is running. Turn the fan on first, then set the timer."
+                translation_domain=DOMAIN,
+                translation_key="timer_requires_fan_on",
             )
         await self.coordinator.device.async_set_state(timer_minutes=int(value))
         await self.coordinator.async_start_fast_poll()

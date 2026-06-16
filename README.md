@@ -111,6 +111,7 @@ If your Fanimation Bluetooth fan works — or doesn't — [open an issue](https:
 - **Finding your MAC address:** use any BLE scanner app (nRF Connect, LightBlue) and look for a device named `CeilingFan`. Colon, dash, or no-separator formats are all accepted.
 - **Entities go grey / "unavailable"?** BLE polling failed repeatedly. Move the fan closer to an adapter/proxy, or raise the **Unavailable threshold** in the integration's options.
 - **State seems to lag the physical remote.** The RF remote is independent of Bluetooth; the integration polls and reconciles state, so remote changes appear after the next poll rather than instantly.
+- **Sleep timer won't set / immediately reads 0?** The fan must be *running* before you set a timer — the BTCR9 controller silently ignores a timer set while the fan is off. Turn the fan on first, then set the minutes.
 - **I have a Fanimation *WiFi* fan.** This integration is Bluetooth-only and cannot control WiFi fans — see the note at the top.
 
 ## For Developers

@@ -43,24 +43,18 @@ rules:
   # ---------------------------------------------------------------- Silver ---
   action-exceptions: done
   config-entry-unloading: done
-  docs-configuration-parameters:
-    status: todo
-    comment: Document each options-flow parameter in user docs.
-  docs-installation-parameters:
-    status: todo
-    comment: Document the MAC / name / speed-count setup fields in user docs.
+  docs-configuration-parameters: done  # README "Options" documents all six options-flow parameters
+  docs-installation-parameters: done  # README documents the MAC + speed-count setup fields (name field is self-evident)
   entity-unavailable: done
   integration-owner: done
   log-when-unavailable: done
-  parallel-updates:
-    status: todo
-    comment: light + number done; fan platform's PARALLEL_UPDATES lands with the #4 fan work.
+  parallel-updates: done  # all three platforms (fan, light, number) set PARALLEL_UPDATES = 1
   reauthentication-flow:
     status: exempt
     comment: Local BLE device with no credentials or auth.
   test-coverage:
     status: todo
-    comment: Measure and reach >95% across all modules.
+    comment: number.py now 100% (test_number.py). Real gaps remain in device.py (BLE I/O), __init__.py, light.py, entity.py; >95% is a separate effort (config_flow/diagnostics covered in CI only).
 
   # ------------------------------------------------------------------ Gold ---
   devices: done
@@ -73,29 +67,22 @@ rules:
     status: todo
   docs-examples:
     status: todo
-  docs-known-limitations:
-    status: todo
-    comment: Document AC-vs-DC direction and the timer-needs-fan-running rule.
+  docs-known-limitations: done  # README documents AC-vs-DC direction and the timer-needs-fan-running rule
   docs-supported-devices: done
   docs-supported-functions: done
-  docs-troubleshooting:
-    status: todo
+  docs-troubleshooting: done  # README "Troubleshooting" section
   docs-use-cases:
     status: todo
   dynamic-devices:
     status: exempt
     comment: One physical device per config entry.
-  entity-category:
-    status: todo
-    comment: Decision pending — sleep timer is an operational control (leaning no category); revisit whether EntityCategory.CONFIG fits.
+  entity-category: done  # No category: fan/light/timer are primary controls. The timer is operational with live state and triggers a primary action, so CONFIG/DIAGNOSTIC don't fit; config-like settings live in the options flow, not entities.
   entity-device-class: done
   entity-disabled-by-default:
     status: exempt
     comment: All three entities are primary controls.
   entity-translations: done
-  exception-translations:
-    status: todo
-    comment: Make the sleep-timer HomeAssistantError translatable.
+  exception-translations: done  # sleep-timer HomeAssistantError uses translation_key; transport ConnectionError/ValueError are internal, not user-facing
   icon-translations: done
   reconfiguration-flow:
     status: todo
