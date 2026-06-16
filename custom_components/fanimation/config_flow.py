@@ -246,6 +246,48 @@ class FanimationConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Change the MAC / name of an existing entry without re-adding it.
+
+        speed_count is intentionally not here — it is editable in the options flow.
+        The MAC may change (fix a typo / replaced receiver); we re-validate the new
+        address and block pointing at a fan that is already configured elsewhere.
+        """
+        reconfigure_entry = self._get_reconfigure_entry()
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            mac = _normalize_mac(user_input[CONF_MAC])
+            if mac is None:
+                errors[CONF_MAC] = "invalid_mac"
+            else:
+                name = user_input[CONF_NAME]
+                if mac != reconfigure_entry.unique_id:
+                    # MAC changed: re-key the entry and re-validate the new device.
+                    await self.async_set_unique_id(mac)
+                    self._abort_if_unique_id_configured()
+                    if not await self._async_validate_device(mac):
+                        errors["base"] = "cannot_connect"
+                if not errors:
+                    return self.async_update_reload_and_abort(
+                        reconfigure_entry,
+                        unique_id=mac,
+                        title=name,
+                        data_updates={CONF_MAC: mac, CONF_NAME: name},
+                    )
+
+        defaults = user_input or reconfigure_entry.data
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_MAC, default=defaults[CONF_MAC]): str,
+                    vol.Required(CONF_NAME, default=defaults[CONF_NAME]): str,
+                }
+            ),
+            errors=errors,
+        )
+
 
 class FanimationOptionsFlow(OptionsFlowWithConfigEntry):
     """Handle options for Fanimation BLE."""

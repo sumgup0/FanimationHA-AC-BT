@@ -415,3 +415,113 @@ class TestDuplicatePrevention:
 
         assert result["type"] is FlowResultType.ABORT
         assert result["reason"] == "already_configured"
+
+
+# ---------------------------------------------------------------------------
+# Reconfiguration flow (change MAC / name)
+# ---------------------------------------------------------------------------
+
+OTHER_MAC = "AA:BB:CC:DD:EE:FF"
+_VALIDATE = "custom_components.fanimation.config_flow.FanimationConfigFlow._async_validate_device"
+_SETUP = "custom_components.fanimation.async_setup_entry"
+
+
+def _existing_entry(hass: HomeAssistant) -> MockConfigEntry:
+    """Add and return a configured fan entry for reconfigure tests."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=TEST_MAC.upper(),
+        data={CONF_MAC: TEST_MAC.upper(), CONF_NAME: TEST_NAME, CONF_SPEED_COUNT: 3},
+    )
+    entry.add_to_hass(hass)
+    return entry
+
+
+class TestReconfigure:
+    """Tests for async_step_reconfigure (change MAC / name in place)."""
+
+    async def test_reconfigure_shows_form(self, hass: HomeAssistant) -> None:
+        entry = _existing_entry(hass)
+        result = await entry.start_reconfigure_flow(hass)
+        assert result["type"] is FlowResultType.FORM
+        assert result["step_id"] == "reconfigure"
+
+    async def test_reconfigure_rename_only_skips_validation(self, hass: HomeAssistant) -> None:
+        entry = _existing_entry(hass)
+        result = await entry.start_reconfigure_flow(hass)
+
+        with (
+            patch(_VALIDATE, AsyncMock(return_value=True)) as mock_validate,
+            patch(_SETUP, return_value=True),
+        ):
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                user_input={CONF_MAC: TEST_MAC.upper(), CONF_NAME: "Living Room Fan"},
+            )
+            await hass.async_block_till_done()
+
+        assert result["type"] is FlowResultType.ABORT
+        assert result["reason"] == "reconfigure_successful"
+        mock_validate.assert_not_called()
+        assert entry.data[CONF_NAME] == "Living Room Fan"
+        assert entry.data[CONF_MAC] == TEST_MAC.upper()
+        assert entry.data[CONF_SPEED_COUNT] == 3
+        assert entry.title == "Living Room Fan"
+
+    async def test_reconfigure_mac_change_validates_and_updates(self, hass: HomeAssistant) -> None:
+        entry = _existing_entry(hass)
+        result = await entry.start_reconfigure_flow(hass)
+
+        with (
+            patch(_VALIDATE, AsyncMock(return_value=True)) as mock_validate,
+            patch(_SETUP, return_value=True),
+        ):
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                user_input={CONF_MAC: OTHER_MAC, CONF_NAME: TEST_NAME},
+            )
+            await hass.async_block_till_done()
+
+        assert result["type"] is FlowResultType.ABORT
+        assert result["reason"] == "reconfigure_successful"
+        mock_validate.assert_awaited_once()
+        assert entry.data[CONF_MAC] == OTHER_MAC
+        assert entry.unique_id == OTHER_MAC
+
+    async def test_reconfigure_invalid_mac_shows_error(self, hass: HomeAssistant) -> None:
+        entry = _existing_entry(hass)
+        result = await entry.start_reconfigure_flow(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input={CONF_MAC: "not-a-mac", CONF_NAME: TEST_NAME},
+        )
+        assert result["type"] is FlowResultType.FORM
+        assert result["errors"] == {CONF_MAC: "invalid_mac"}
+
+    async def test_reconfigure_unreachable_shows_error(self, hass: HomeAssistant) -> None:
+        entry = _existing_entry(hass)
+        result = await entry.start_reconfigure_flow(hass)
+        with patch(_VALIDATE, AsyncMock(return_value=False)):
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                user_input={CONF_MAC: OTHER_MAC, CONF_NAME: TEST_NAME},
+            )
+        assert result["type"] is FlowResultType.FORM
+        assert result["errors"] == {"base": "cannot_connect"}
+
+    async def test_reconfigure_collision_aborts(self, hass: HomeAssistant) -> None:
+        entry = _existing_entry(hass)
+        other = MockConfigEntry(
+            domain=DOMAIN,
+            unique_id=OTHER_MAC,
+            data={CONF_MAC: OTHER_MAC, CONF_NAME: "Other Fan", CONF_SPEED_COUNT: 3},
+        )
+        other.add_to_hass(hass)
+
+        result = await entry.start_reconfigure_flow(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input={CONF_MAC: OTHER_MAC, CONF_NAME: TEST_NAME},
+        )
+        assert result["type"] is FlowResultType.ABORT
+        assert result["reason"] == "already_configured"
