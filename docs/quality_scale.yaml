@@ -101,4 +101,4 @@ rules:
     comment: BLE transport; there is no HTTP session to inject.
   strict-typing:
     status: todo
-    comment: py.typed and mypy config added; flow and fan modules still need full typing and a CI mypy job.
+    comment: Code passes mypy --strict (0 errors, commit 89791a6); still needs a CI mypy job + mypy as a dev-dep, verified via the PR before marking done.
