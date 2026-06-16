@@ -153,7 +153,10 @@ class FanimationDevice:
         self._notify_event.clear()
         self._last_notification = None
 
-        await self._client.write_gatt_char(CHAR_WRITE, packet)
+        client = self._client
+        if client is None:
+            raise ConnectionError(f"Fan {self._name} ({self._mac}) is not connected")
+        await client.write_gatt_char(CHAR_WRITE, packet)
 
         try:
             await asyncio.wait_for(self._notify_event.wait(), timeout=timeout)

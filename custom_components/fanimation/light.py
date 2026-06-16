@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any
 
-from homeassistant.components.light import (
-    ATTR_BRIGHTNESS,
-    ColorMode,
-    LightEntity,
-)
+from homeassistant.components.light import ATTR_BRIGHTNESS, LightEntity
+from homeassistant.components.light.const import ColorMode
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -42,7 +39,6 @@ class FanimationLight(FanimationEntity, LightEntity):
     """Fanimation downlight entity."""
 
     _attr_color_mode = ColorMode.BRIGHTNESS
-    _attr_supported_color_modes: ClassVar[set[ColorMode]] = {ColorMode.BRIGHTNESS}
     _attr_translation_key = "downlight"
 
     def __init__(
@@ -52,6 +48,9 @@ class FanimationLight(FanimationEntity, LightEntity):
     ) -> None:
         """Initialize the light entity."""
         super().__init__(coordinator, entry_id)
+        # Instance (not class) attribute: overriding LightEntity's instance var with a
+        # ClassVar trips mypy [misc], and a bare class-level mutable set trips ruff RUF012.
+        self._attr_supported_color_modes = {ColorMode.BRIGHTNESS}
         self._attr_unique_id = f"{coordinator.device.mac}_light"
         self._last_brightness = DOWNLIGHT_MAX  # default for turn_on without brightness
 

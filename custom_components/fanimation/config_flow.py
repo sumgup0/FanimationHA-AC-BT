@@ -103,8 +103,9 @@ class FanimationConfigFlow(ConfigFlow, domain=DOMAIN):
     def __init__(self) -> None:
         """Initialize the config flow."""
         self._discovery_info: BluetoothServiceInfoBleak | None = None
-        self._mac: str | None = None
-        self._discovered_name: str | None = None
+        # Populated during Bluetooth discovery before async_step_bluetooth_confirm; "" until then.
+        self._mac: str = ""
+        self._discovered_name: str = ""
 
     async def _async_validate_device(self, mac: str) -> bool:
         """Connect to the fan and verify expected GATT characteristics exist.
