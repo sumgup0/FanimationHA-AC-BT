@@ -90,3 +90,58 @@ class TestDefaultBrightness:
         await light.async_turn_on()
 
         mock_coord.device.async_set_state.assert_called_once_with(downlight=100)
+
+
+class TestLightMisc:
+    """Cover setup, is_on, brightness, extra attributes, and turn_off."""
+
+    @pytest.mark.asyncio
+    async def test_async_setup_entry_adds_one_light(self) -> None:
+        from custom_components.fanimation.light import FanimationLight, async_setup_entry
+
+        _, coordinator = _make_light()
+        entry = MagicMock()
+        entry.runtime_data = coordinator
+        entry.entry_id = "test_entry"
+
+        added: list = []
+        await async_setup_entry(MagicMock(), entry, lambda e: added.extend(e))
+
+        assert len(added) == 1
+        assert isinstance(added[0], FanimationLight)
+
+    def test_is_on_true_when_lit(self) -> None:
+        light, coord = _make_light()
+        coord.data = FanimationState(downlight=50)
+        assert light.is_on is True
+
+    def test_is_on_false_when_dark(self) -> None:
+        light, coord = _make_light()
+        coord.data = FanimationState(downlight=0)
+        assert light.is_on is False
+
+    def test_is_on_none_without_data(self) -> None:
+        light, coord = _make_light()
+        coord.data = None
+        assert light.is_on is None
+
+    def test_brightness_scales_to_ha_255(self) -> None:
+        light, coord = _make_light()
+        coord.data = FanimationState(downlight=DOWNLIGHT_MAX)
+        assert light.brightness == 255
+
+    def test_brightness_none_without_data(self) -> None:
+        light, coord = _make_light()
+        coord.data = None
+        assert light.brightness is None
+
+    def test_extra_state_attributes(self) -> None:
+        light, _ = _make_light()
+        assert "rf_remote_sync" in light.extra_state_attributes
+
+    @pytest.mark.asyncio
+    async def test_turn_off_sets_downlight_zero(self) -> None:
+        light, coord = _make_light()
+        await light.async_turn_off()
+        coord.device.async_set_state.assert_called_once_with(downlight=0)
+        coord.async_start_fast_poll.assert_awaited_once()

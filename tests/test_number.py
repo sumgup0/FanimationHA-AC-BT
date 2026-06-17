@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from homeassistant.exceptions import HomeAssistantError
 
-from custom_components.fanimation.const import DOMAIN
+from custom_components.fanimation.const import DOMAIN, POLL_SLOW
 from custom_components.fanimation.device import FanimationState
 
 
@@ -117,3 +117,35 @@ async def test_async_setup_entry_adds_single_timer() -> None:
 
     assert len(added) == 1
     assert isinstance(added[0], FanimationTimer)
+
+
+class TestConnectionStatus:
+    """Cover the base entity's connection_status formatting (entity.py)."""
+
+    def test_connected_when_no_failures(self) -> None:
+        timer, coordinator = _make_timer()
+        coordinator.connection_failures = 0
+        assert timer.extra_state_attributes["connection_status"] == "connected"
+
+    def test_single_failure_is_singular(self) -> None:
+        timer, coordinator = _make_timer()
+        coordinator.connection_failures = 1
+        status = timer.extra_state_attributes["connection_status"]
+        assert status == f"unreachable (1 attempt, ~{POLL_SLOW // 60} min)"
+
+    def test_minutes_window_is_plural(self) -> None:
+        timer, coordinator = _make_timer()
+        coordinator.connection_failures = 2
+        status = timer.extra_state_attributes["connection_status"]
+        assert "2 attempts" in status
+        assert "min" in status
+
+    def test_hours_window(self) -> None:
+        timer, coordinator = _make_timer()
+        coordinator.connection_failures = 3600 // POLL_SLOW  # 60 min → "~1 hr"
+        assert "hr" in timer.extra_state_attributes["connection_status"]
+
+    def test_days_window(self) -> None:
+        timer, coordinator = _make_timer()
+        coordinator.connection_failures = 86400 // POLL_SLOW  # 1440 min → "~1 day(s)"
+        assert "day(s)" in timer.extra_state_attributes["connection_status"]

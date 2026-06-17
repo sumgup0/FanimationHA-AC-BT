@@ -340,3 +340,50 @@ class TestIssue4Direction:
         fan, coord = _make_fan(fan_type=2)
         await fan.async_set_direction(DIRECTION_FORWARD)
         coord.device.async_set_state.assert_called_once_with(direction=DIR_FORWARD)
+
+
+class TestFanMisc:
+    """Cover setup, is_on, percentage-without-data, and extra attributes."""
+
+    @pytest.mark.asyncio
+    async def test_async_setup_entry_adds_one_fan(self) -> None:
+        from custom_components.fanimation.fan import FanimationFan, async_setup_entry
+
+        _, coordinator = _make_fan()
+        entry = MagicMock()
+        entry.runtime_data = coordinator
+        entry.entry_id = "test_entry"
+        entry.options = {}
+        entry.data = {CONF_SPEED_COUNT: 3}
+
+        added: list = []
+        await async_setup_entry(MagicMock(), entry, lambda e: added.extend(e))
+
+        assert len(added) == 1
+        assert isinstance(added[0], FanimationFan)
+
+    def test_is_on_true_when_running(self) -> None:
+        fan, coord = _make_fan()
+        coord.data = FanimationState(speed=2)
+        assert fan.is_on is True
+
+    def test_is_on_false_when_off(self) -> None:
+        fan, coord = _make_fan()
+        coord.data = FanimationState(speed=0)
+        assert fan.is_on is False
+
+    def test_is_on_none_without_data(self) -> None:
+        fan, coord = _make_fan()
+        coord.data = None
+        assert fan.is_on is None
+
+    def test_percentage_none_without_data(self) -> None:
+        fan, coord = _make_fan()
+        coord.data = None
+        assert fan.percentage is None
+
+    def test_extra_state_attributes(self) -> None:
+        fan, _ = _make_fan()
+        attrs = fan.extra_state_attributes
+        assert "rf_remote_sync" in attrs
+        assert attrs["connection_status"] == "connected"
