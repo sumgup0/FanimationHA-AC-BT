@@ -7,6 +7,10 @@ dependency, no mocking of bleak, and no Home Assistant test harness.
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
 from custom_components.fanimation.const import (
     CMD_GET_STATUS,
     CMD_SET_STATE,
@@ -15,7 +19,7 @@ from custom_components.fanimation.const import (
 )
 from custom_components.fanimation.device import FanimationDevice, FanimationState
 
-from .conftest import build_response
+from .conftest import TEST_MAC, TEST_NAME, build_response
 
 # ---------------------------------------------------------------------------
 # _build_packet tests
@@ -271,3 +275,192 @@ class TestFanimationState:
         s1 = FanimationState(speed=1)
         s2 = FanimationState(speed=2)
         assert s1 != s2
+
+
+# ---------------------------------------------------------------------------
+# Stateful BLE client tests
+#
+# These inject an AsyncMock/MagicMock client and patch the conftest-stubbed
+# ``bluetooth`` / ``establish_connection`` in the device namespace — no real
+# Bluetooth, no hardware.
+# ---------------------------------------------------------------------------
+
+
+class TestDeviceBasics:
+    """Construction, properties, notification handler, disconnect callback."""
+
+    def test_init_and_properties(self) -> None:
+        device = FanimationDevice(MagicMock(), TEST_MAC, TEST_NAME)
+        assert device.mac == TEST_MAC
+        assert device.name == TEST_NAME
+        assert device._client is None
+
+    def test_notification_handler_stores_and_signals(self) -> None:
+        device = FanimationDevice(MagicMock(), TEST_MAC, TEST_NAME)
+        data = build_response(speed=1)
+        device._notification_handler(None, data)
+        assert device._last_notification == data
+        assert device._notify_event.is_set()
+
+    def test_on_disconnect_clears_client(self) -> None:
+        device = FanimationDevice(MagicMock(), TEST_MAC, TEST_NAME)
+        device._client = MagicMock()
+        device._on_disconnect(MagicMock())
+        assert device._client is None
+
+
+_ADDR = "custom_components.fanimation.device.bluetooth.async_ble_device_from_address"
+_CONNECT = "custom_components.fanimation.device.establish_connection"
+
+
+class TestEnsureConnected:
+    @pytest.mark.asyncio
+    async def test_noop_when_already_connected(self) -> None:
+        device = FanimationDevice(MagicMock(), TEST_MAC, TEST_NAME)
+        client = MagicMock()
+        client.is_connected = True
+        device._client = client
+        await device._ensure_connected()
+        assert device._client is client
+
+    @pytest.mark.asyncio
+    async def test_raises_when_no_adapter_finds_device(self) -> None:
+        device = FanimationDevice(MagicMock(), TEST_MAC, TEST_NAME)
+        with patch(_ADDR, return_value=None), pytest.raises(ConnectionError):
+            await device._ensure_connected()
+
+    @pytest.mark.asyncio
+    async def test_connects_and_subscribes(self) -> None:
+        device = FanimationDevice(MagicMock(), TEST_MAC, TEST_NAME)
+        client = AsyncMock()
+        with (
+            patch(_ADDR, return_value=MagicMock()),
+            patch(_CONNECT, AsyncMock(return_value=client)),
+        ):
+            await device._ensure_connected()
+        assert device._client is client
+        client.start_notify.assert_awaited_once()
+
+
+class TestDisconnect:
+    @pytest.mark.asyncio
+    async def test_closes_and_clears(self) -> None:
+        device = FanimationDevice(MagicMock(), TEST_MAC, TEST_NAME)
+        client = AsyncMock()
+        device._client = client
+        await device.disconnect()
+        client.disconnect.assert_awaited_once()
+        assert device._client is None
+
+    @pytest.mark.asyncio
+    async def test_noop_without_client(self) -> None:
+        device = FanimationDevice(MagicMock(), TEST_MAC, TEST_NAME)
+        await device.disconnect()
+        assert device._client is None
+
+    @pytest.mark.asyncio
+    async def test_swallows_disconnect_errors(self) -> None:
+        device = FanimationDevice(MagicMock(), TEST_MAC, TEST_NAME)
+        client = AsyncMock()
+        client.disconnect.side_effect = Exception("BLE error")
+        device._client = client
+        await device.disconnect()
+        assert device._client is None
+
+
+class TestSendAndReceive:
+    @pytest.mark.asyncio
+    async def test_happy_path_returns_notification(self) -> None:
+        device = FanimationDevice(MagicMock(), TEST_MAC, TEST_NAME)
+        response = build_response(speed=2)
+
+        async def _write(_char: object, _packet: object) -> None:
+            device._notification_handler(None, response)
+
+        client = AsyncMock()
+        client.write_gatt_char = AsyncMock(side_effect=_write)
+        device._client = client
+
+        result = await device._send_and_receive(FanimationDevice._build_packet(CMD_GET_STATUS))
+        assert result == response
+
+    @pytest.mark.asyncio
+    async def test_malformed_packet_raises(self) -> None:
+        device = FanimationDevice(MagicMock(), TEST_MAC, TEST_NAME)
+        device._client = AsyncMock()
+        with pytest.raises(ValueError):
+            await device._send_and_receive(b"\x00\x01")
+
+    @pytest.mark.asyncio
+    async def test_raises_when_not_connected(self) -> None:
+        device = FanimationDevice(MagicMock(), TEST_MAC, TEST_NAME)
+        device._client = None
+        with pytest.raises(ConnectionError):
+            await device._send_and_receive(FanimationDevice._build_packet(CMD_GET_STATUS))
+
+    @pytest.mark.asyncio
+    async def test_timeout_returns_none(self) -> None:
+        device = FanimationDevice(MagicMock(), TEST_MAC, TEST_NAME)
+        device._client = AsyncMock()  # write does nothing → no notification
+        result = await device._send_and_receive(
+            FanimationDevice._build_packet(CMD_GET_STATUS), timeout=0.01
+        )
+        assert result is None
+
+
+class TestAsyncGetStatus:
+    @pytest.mark.asyncio
+    async def test_returns_parsed_state(self) -> None:
+        device = FanimationDevice(MagicMock(), TEST_MAC, TEST_NAME)
+        device._ensure_connected = AsyncMock()
+        device._send_and_receive = AsyncMock(return_value=build_response(speed=2, downlight=40))
+        state = await device.async_get_status()
+        assert state is not None
+        assert state.speed == 2
+        assert state.downlight == 40
+
+    @pytest.mark.asyncio
+    async def test_returns_none_on_no_response(self) -> None:
+        device = FanimationDevice(MagicMock(), TEST_MAC, TEST_NAME)
+        device._ensure_connected = AsyncMock()
+        device._send_and_receive = AsyncMock(return_value=None)
+        assert await device.async_get_status() is None
+
+
+class TestAsyncSetState:
+    @pytest.mark.asyncio
+    async def test_merges_unset_fields_and_verifies(self) -> None:
+        device = FanimationDevice(MagicMock(), TEST_MAC, TEST_NAME)
+        device._ensure_connected = AsyncMock()
+        current = build_response(speed=1, downlight=50)
+        verify = build_response(speed=3, downlight=50)
+        # GET (read-before-write), SET (echo, ignored), GET (verify)
+        device._send_and_receive = AsyncMock(side_effect=[current, build_response(speed=3), verify])
+        state = await device.async_set_state(speed=3)
+        assert state is not None
+        assert state.speed == 3
+        assert state.downlight == 50  # preserved from current state
+
+    @pytest.mark.asyncio
+    async def test_none_when_initial_read_fails(self) -> None:
+        device = FanimationDevice(MagicMock(), TEST_MAC, TEST_NAME)
+        device._ensure_connected = AsyncMock()
+        device._send_and_receive = AsyncMock(return_value=None)
+        assert await device.async_set_state(speed=3) is None
+
+    @pytest.mark.asyncio
+    async def test_none_when_read_unparseable(self) -> None:
+        device = FanimationDevice(MagicMock(), TEST_MAC, TEST_NAME)
+        device._ensure_connected = AsyncMock()
+        bad = build_response(speed=1)
+        bad[9] = 0  # corrupt checksum → parse returns None
+        device._send_and_receive = AsyncMock(return_value=bad)
+        assert await device.async_set_state(speed=3) is None
+
+    @pytest.mark.asyncio
+    async def test_none_when_verify_fails(self) -> None:
+        device = FanimationDevice(MagicMock(), TEST_MAC, TEST_NAME)
+        device._ensure_connected = AsyncMock()
+        current = build_response(speed=1, downlight=50)
+        device._send_and_receive = AsyncMock(side_effect=[current, build_response(speed=3), None])
+        assert await device.async_set_state(speed=3) is None
