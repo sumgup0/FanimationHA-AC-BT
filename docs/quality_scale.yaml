@@ -52,9 +52,7 @@ rules:
   reauthentication-flow:
     status: exempt
     comment: Local BLE device with no credentials or auth.
-  test-coverage:
-    status: todo
-    comment: Phase 1 done — entity.py/fan.py/light.py/device.py all 100% locally (number.py already 100%). Remaining gaps: coordinator.py + __init__.py, plus the CI --cov-fail-under gate; true >95% total is CI-only (config_flow/diagnostics read 0% locally).
+  test-coverage: done  # 100% in CI (612/612 stmts, all modules incl. Linux-only config_flow/diagnostics); enforced by --cov-fail-under=100 in the Tests workflow.
 
   # ------------------------------------------------------------------ Gold ---
   devices: done
