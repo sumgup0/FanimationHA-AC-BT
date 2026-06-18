@@ -97,6 +97,4 @@ rules:
   inject-websession:
     status: exempt
     comment: BLE transport; there is no HTTP session to inject.
-  strict-typing:
-    status: todo
-    comment: Code passes mypy --strict (0 errors, commit 89791a6); still needs a CI mypy job + mypy as a dev-dep, verified via the PR before marking done.
+  strict-typing: done  # mypy --strict clean (0 errors, 89791a6); CI mypy job (.github/workflows/mypy.yml) green in PR #9.
