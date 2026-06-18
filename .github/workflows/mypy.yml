@@ -1,0 +1,31 @@
+name: Strict typing
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions: {}
+
+jobs:
+  mypy:
+    name: mypy --strict
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          python3 -m pip install -r requirements_test.txt
+
+      - name: Type-check (strict)
+        run: python3 -m mypy custom_components/fanimation
