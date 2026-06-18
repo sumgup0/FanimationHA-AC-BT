@@ -37,6 +37,19 @@ Per-fan options are configurable via **Settings → Devices → Configure** ([sc
 - **Disconnect notification** — persistent alert on first BLE failure
 - **Unavailable threshold** — how many poll failures before entities go grey
 
+## Use cases
+
+Bringing the fan into Home Assistant turns a remote-only ceiling fan into something you can automate, schedule, and combine with the rest of your home:
+
+- **Replace the remote.** Control speed, the downlight, and the sleep timer from any dashboard, your phone, or a wall tablet — no hunting for the RF remote.
+- **Temperature-reactive comfort.** Pair the fan with a thermostat or temperature sensor so it speeds up when a room warms and idles when it cools.
+- **Presence and away logic.** Turn the fan off when everyone leaves and resume it when someone gets home, or keep it on low while you're away to keep air moving.
+- **Schedules and sleep.** Drop to low at bedtime and arm the built-in sleep timer so the fan and light switch themselves off after you doze off; spin back up before you wake.
+- **Voice control.** It's a standard `fan` entity, so "turn off the bedroom fan" or "set the bedroom fan to 50%" works through Home Assistant Assist or any linked Alexa / Google / Siri assistant.
+- **One dashboard for every fan.** Group several Fanimation fans alongside your lights and climate on a single view instead of juggling one remote per room.
+
+Ready-to-adapt YAML for several of these is in [Example automations](#example-automations).
+
 ## What Works
 
 The BTCR9 BLE protocol has been reverse-engineered and verified on real AC hardware (DC fans community-tested):
@@ -104,6 +117,74 @@ This integration talks to the fan's **Bluetooth receiver**, so it should work wi
 - **Fanimation Odyn 84"** DC fan with TR305 FanSync remote (32 speeds) — community-tested in 1.2.0 by @JesusSanchezLopez, across 4 AC and DC fans ([Issue #1](https://github.com/sumgup0/FanimationHA-AC-BT/issues/1))
 
 If your Fanimation Bluetooth fan works — or doesn't — [open an issue](https://github.com/sumgup0/FanimationHA-AC-BT/issues) with the model name and speed count.
+
+## Example automations
+
+These examples use a fan named **Living Room Fan**; change the entity IDs to match yours. The three entities all live under the one fan device: the fan (`fan.living_room_fan`), its downlight (`light.living_room_fan_downlight`), and the sleep timer (`number.living_room_fan_sleep_timer`).
+
+**Speed up when the room gets warm** — pair with any temperature sensor:
+
+```yaml
+automation:
+  - alias: "Living room fan follows temperature"
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.living_room_temperature
+        above: 25          # °C
+    action:
+      - service: fan.set_percentage
+        target:
+          entity_id: fan.living_room_fan
+        data:
+          percentage: 100
+```
+
+**Turn the fan off when everyone leaves:**
+
+```yaml
+automation:
+  - alias: "Fan off when away"
+    trigger:
+      - platform: state
+        entity_id: group.family
+        to: "not_home"
+    action:
+      - service: fan.turn_off
+        target:
+          entity_id: fan.living_room_fan
+```
+
+**Wind down at bedtime with the sleep timer** — it turns the fan *and* light off when it expires:
+
+```yaml
+automation:
+  - alias: "Bedroom fan sleep timer at 11 PM"
+    trigger:
+      - platform: time
+        at: "23:00:00"
+    action:
+      - service: fan.set_percentage      # the timer is ignored unless the fan is running
+        target:
+          entity_id: fan.bedroom_fan
+        data:
+          percentage: 33
+      - service: number.set_value
+        target:
+          entity_id: number.bedroom_fan_sleep_timer
+        data:
+          value: 60                      # minutes
+```
+
+The bedtime example sets a low speed *before* arming the timer on purpose: the BTCR9 silently ignores a timer set while the fan is off (see [Troubleshooting](#troubleshooting)).
+
+## How Home Assistant stays in sync
+
+This is a **local-polling** integration (`iot_class: local_polling`) — no cloud, no push. Home Assistant holds a Bluetooth connection to the fan and reads its state with a `GET_STATUS` poll on a schedule:
+
+- **Idle polling — every 5 minutes.** Between commands the integration polls slowly to keep Bluetooth traffic low.
+- **Fast burst after a command — ~1 second, three times.** When you change speed, brightness, direction, or the timer, it drops to a 1-second poll for three cycles so the dashboard confirms the new state almost instantly, then returns to the 5-minute cadence.
+- **No push updates, and the RF remote is independent of Bluetooth.** The BTCR9 doesn't push state changes on its own, so a change made with the physical remote is only reflected on the next poll — up to ~5 minutes later. Every command Home Assistant sends reads the live state first (read-before-write), so remote changes are never clobbered.
+- **The poll interval is fixed,** but the **Unavailable threshold** option controls how many consecutive failed polls (each ≈ 5 minutes) are tolerated before a fan's entities go grey.
 
 ## Troubleshooting
 

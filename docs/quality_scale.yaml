@@ -61,16 +61,13 @@ rules:
   discovery-update-info:
     status: todo
     comment: Refresh device info from Bluetooth re-discovery.
-  docs-data-update:
-    status: todo
-  docs-examples:
-    status: todo
+  docs-data-update: done  # README "How Home Assistant stays in sync" — local_polling, 5-min slow poll + 1s×3 fast burst, no push, RF-remote lag.
+  docs-examples: done  # README "Example automations" — temperature, presence, and bedtime-sleep-timer YAML.
   docs-known-limitations: done  # README documents AC-vs-DC direction and the timer-needs-fan-running rule
   docs-supported-devices: done
   docs-supported-functions: done
   docs-troubleshooting: done  # README "Troubleshooting" section
-  docs-use-cases:
-    status: todo
+  docs-use-cases: done  # README "Use cases" — why integrate + combine-with-other-devices (temperature, presence, voice, dashboards).
   dynamic-devices:
     status: exempt
     comment: One physical device per config entry.
