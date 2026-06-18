@@ -7,6 +7,7 @@ logic. They run on all platforms (no HA test harness required).
 
 from __future__ import annotations
 
+from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -16,6 +17,9 @@ from custom_components.fanimation.const import (
     CONF_UNAVAILABLE_THRESHOLD,
     DEFAULT_NOTIFY_ON_DISCONNECT,
     DEFAULT_UNAVAILABLE_THRESHOLD,
+    POLL_FAST,
+    POLL_FAST_CYCLES,
+    POLL_SLOW,
 )
 from custom_components.fanimation.device import FanimationState
 
@@ -264,3 +268,86 @@ class TestLogWhenUnavailable:
 
         # Flag reset so HA's coordinator owns subsequent loss/recovery logging.
         assert coordinator._unavailable_logged is False
+
+
+class TestFastPoll:
+    """Cover the fast/slow poll transition and async_start_fast_poll."""
+
+    @pytest.mark.asyncio
+    async def test_start_fast_poll_sets_interval_and_refreshes(self) -> None:
+        coordinator, _, _ = _make_coordinator()
+        # Stub HA's refresh scheduler — we only assert our own bookkeeping.
+        coordinator.async_request_refresh = AsyncMock()
+
+        await coordinator.async_start_fast_poll()
+
+        assert coordinator._fast_poll_remaining == POLL_FAST_CYCLES
+        assert coordinator.update_interval == timedelta(seconds=POLL_FAST)
+        coordinator.async_request_refresh.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_fast_poll_decrements_and_reverts_to_slow(self) -> None:
+        coordinator, mock_device, _ = _make_coordinator()
+        mock_device.async_get_status.return_value = FanimationState(speed=1)
+        coordinator._fast_poll_remaining = 1
+        coordinator.update_interval = timedelta(seconds=POLL_FAST)
+
+        await coordinator._async_update_data()
+
+        assert coordinator._fast_poll_remaining == 0
+        assert coordinator.update_interval == timedelta(seconds=POLL_SLOW)
+
+    @pytest.mark.asyncio
+    async def test_fast_poll_stays_fast_until_cycles_exhausted(self) -> None:
+        coordinator, mock_device, _ = _make_coordinator()
+        mock_device.async_get_status.return_value = FanimationState(speed=1)
+        coordinator._fast_poll_remaining = 2
+        coordinator.update_interval = timedelta(seconds=POLL_FAST)
+
+        await coordinator._async_update_data()
+
+        assert coordinator._fast_poll_remaining == 1
+        assert coordinator.update_interval == timedelta(seconds=POLL_FAST)
+
+
+class TestGetOptionFallback:
+    """Cover the _get_option default branch when no options are set."""
+
+    def test_returns_default_without_options(self) -> None:
+        coordinator, _, _ = _make_coordinator()
+        coordinator.config_entry.options = {}  # falsy → fall through to default
+        assert coordinator._get_option("missing", "fallback") == "fallback"
+
+
+class TestNotificationEdgeCases:
+    """Cover the notification early-returns and error-swallowing paths."""
+
+    @pytest.mark.asyncio
+    async def test_create_noop_when_already_active(self) -> None:
+        coordinator, _, mock_hass = _make_coordinator()
+        coordinator._notification_active = True
+        await coordinator._async_create_notification()
+        mock_hass.services.async_call.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_create_swallows_service_error(self) -> None:
+        coordinator, _, mock_hass = _make_coordinator()
+        mock_hass.services.async_call.side_effect = Exception("HA service down")
+        # Must not raise even though the persistent-notification call fails.
+        await coordinator._async_create_notification()
+        assert coordinator._notification_active is True
+
+    @pytest.mark.asyncio
+    async def test_dismiss_noop_when_not_active(self) -> None:
+        coordinator, _, mock_hass = _make_coordinator()
+        assert coordinator._notification_active is False
+        await coordinator._async_dismiss_notification()
+        mock_hass.services.async_call.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_dismiss_swallows_service_error(self) -> None:
+        coordinator, _, mock_hass = _make_coordinator()
+        coordinator._notification_active = True
+        mock_hass.services.async_call.side_effect = Exception("HA service down")
+        await coordinator._async_dismiss_notification()
+        assert coordinator._notification_active is False
