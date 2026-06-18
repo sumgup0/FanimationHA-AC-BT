@@ -402,9 +402,7 @@ class TestSendAndReceive:
     async def test_timeout_returns_none(self) -> None:
         device = FanimationDevice(MagicMock(), TEST_MAC, TEST_NAME)
         device._client = AsyncMock()  # write does nothing → no notification
-        result = await device._send_and_receive(
-            FanimationDevice._build_packet(CMD_GET_STATUS), timeout=0.01
-        )
+        result = await device._send_and_receive(FanimationDevice._build_packet(CMD_GET_STATUS), timeout=0.01)
         assert result is None
 
 
