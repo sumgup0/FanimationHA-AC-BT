@@ -54,7 +54,7 @@ rules:
     comment: Local BLE device with no credentials or auth.
   test-coverage:
     status: todo
-    comment: number.py now 100% (test_number.py). Real gaps remain in device.py (BLE I/O), __init__.py, light.py, entity.py; >95% is a separate effort (config_flow/diagnostics covered in CI only).
+    comment: Phase 1 done — entity.py/fan.py/light.py/device.py all 100% locally (number.py already 100%). Remaining gaps: coordinator.py + __init__.py, plus the CI --cov-fail-under gate; true >95% total is CI-only (config_flow/diagnostics read 0% locally).
 
   # ------------------------------------------------------------------ Gold ---
   devices: done
