@@ -28,4 +28,4 @@ jobs:
           python3 -m pip install -r requirements_test.txt
 
       - name: Run tests
-        run: python3 -m pytest tests/ -v
+        run: python3 -m pytest tests/ -v --cov=custom_components/fanimation --cov-report=term-missing
