@@ -84,9 +84,7 @@ rules:
   entity-translations: done
   exception-translations: done  # sleep-timer HomeAssistantError uses translation_key; transport ConnectionError/ValueError are internal, not user-facing
   icon-translations: done
-  reconfiguration-flow:
-    status: todo
-    comment: Add async_step_reconfigure to change MAC / name without re-adding.
+  reconfiguration-flow: done  # async_step_reconfigure (change MAC/name in place) + 6 TestReconfigure cases; pytest green in CI (PR #9).
   repair-issues:
     status: todo
     comment: Raise a repair issue when speed_count is misconfigured.
