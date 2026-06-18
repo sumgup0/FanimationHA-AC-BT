@@ -111,5 +111,11 @@
     "timer_requires_fan_on": {
       "message": "The sleep timer only works when the fan is running. Turn the fan on first, then set the timer."
     }
+  },
+  "issues": {
+    "speed_count_out_of_range": {
+      "title": "{name}: fan speed exceeds the configured speed count",
+      "description": "{name} reported speed {reported_speed}, but it is set to only {speed_count} speeds, so Home Assistant is clamping the speed slider to its maximum. Speeds set above this with the RF remote will read as the top step.\n\nTo fix this, open the integration options (Settings → Devices & Services → Fanimation BLE Ceiling Fan → Configure) and set **Number of fan speeds** to match your fan's hardware. AC fans are usually 3; DC fans are commonly 6 or 32."
+    }
   }
 }

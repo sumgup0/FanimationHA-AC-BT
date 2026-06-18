@@ -11,7 +11,8 @@ from homeassistant.components.fan import (
     FanEntity,
     FanEntityFeature,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util.percentage import (
     percentage_to_ranged_value,
@@ -27,6 +28,7 @@ from .const import (
     DEFAULT_SPEED_LAST_USED,
     DIR_FORWARD,
     DIR_REVERSE,
+    DOMAIN,
     SPEED_LOW,
     SPEED_OFF,
     fan_type_supports_reverse,
@@ -62,6 +64,7 @@ class FanimationFan(FanimationEntity, FanEntity):
     ) -> None:
         """Initialize the fan entity."""
         super().__init__(coordinator, entry.entry_id)
+        self._entry_id = entry.entry_id
         self._attr_unique_id = f"{coordinator.device.mac}_fan"
         # Speed count: options-flow value wins, then install-time data, then default.
         self._speed_count = entry.options.get(
@@ -81,6 +84,62 @@ class FanimationFan(FanimationEntity, FanEntity):
         if self._supports_reverse:
             features |= FanEntityFeature.DIRECTION
         self._attr_supported_features = features
+
+    @property
+    def _speed_count_issue_id(self) -> str:
+        """Deterministic repair-issue id for this fan's speed-count mismatch."""
+        return f"speed_count_out_of_range_{self._entry_id}"
+
+    async def async_added_to_hass(self) -> None:
+        """Register the coordinator listener and evaluate the speed-count issue once."""
+        await super().async_added_to_hass()
+        self._evaluate_speed_count_issue()
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Clear any open speed-count repair issue when the entity is removed.
+
+        Covers integration removal: the in-range self-heal only runs while the
+        entity is alive, so without this a stale issue would linger until the
+        next restart (the issue is non-persistent).
+        """
+        ir.async_delete_issue(self.hass, DOMAIN, self._speed_count_issue_id)
+        await super().async_will_remove_from_hass()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Re-evaluate the speed-count issue on each poll, then write entity state."""
+        self._evaluate_speed_count_issue()
+        super()._handle_coordinator_update()
+
+    @callback
+    def _evaluate_speed_count_issue(self) -> None:
+        """Raise or clear a repair issue when the fan reports a speed above speed_count.
+
+        A hardware speed greater than the configured ``speed_count`` (e.g. a
+        32-speed DC fan left at the default 3) is a user-fixable misconfiguration:
+        ``percentage`` clamps the slider to the configured max, so higher speeds
+        set by the RF remote read as the top step. The repair issue points the
+        user at the options flow to raise the count, and clears automatically
+        once the reported speed is back in range — including after the user fixes
+        the option and the entry reloads.
+        """
+        data = self.coordinator.data
+        if data is not None and data.speed > self._speed_count:
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                self._speed_count_issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="speed_count_out_of_range",
+                translation_placeholders={
+                    "name": self.coordinator.device.name,
+                    "reported_speed": str(data.speed),
+                    "speed_count": str(self._speed_count),
+                },
+            )
+        else:
+            ir.async_delete_issue(self.hass, DOMAIN, self._speed_count_issue_id)
 
     @property
     def is_on(self) -> bool | None:

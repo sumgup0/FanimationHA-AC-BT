@@ -83,9 +83,7 @@ rules:
   exception-translations: done  # sleep-timer HomeAssistantError uses translation_key; transport ConnectionError/ValueError are internal, not user-facing
   icon-translations: done
   reconfiguration-flow: done  # async_step_reconfigure (change MAC/name in place) + 6 TestReconfigure cases; pytest green in CI (PR #9).
-  repair-issues:
-    status: todo
-    comment: Raise a repair issue when speed_count is misconfigured.
+  repair-issues: done  # WARNING repair issue when a fan reports speed > configured speed_count (fan.py _evaluate_speed_count_issue); points user at the options flow, self-clears when back in range. Issue #1 follow-up.
   stale-devices:
     status: exempt
     comment: One physical device per config entry.
