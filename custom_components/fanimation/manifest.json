@@ -10,6 +10,7 @@
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/sumgup0/FanimationHA-AC-BT/issues",
   "loggers": ["custom_components.fanimation"],
+  "quality_scale": "platinum",
   "requirements": ["bleak-retry-connector>=4.0.0"],
   "version": "1.3.0"
 }

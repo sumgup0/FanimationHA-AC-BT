@@ -1,14 +1,8 @@
-# Home Assistant Integration Quality Scale — progress tracker.
+# Home Assistant Integration Quality Scale — Fanimation BLE Ceiling Fan.
 #
-# STAGED IN docs/ ON PURPOSE. hassfest validates quality_scale.yaml when it
-# lives in the integration directory and fails CI if manifest.json declares a
-# tier whose rules are not all `done`/`exempt`. Until the tiers are green this
-# file is kept out of custom_components/fanimation/ so the Validate workflow
-# stays green.
-#
-# CAPSTONE STEP (per tier, once its rules are all done/exempt):
-#   1. git mv docs/quality_scale.yaml custom_components/fanimation/quality_scale.yaml
-#   2. add  "quality_scale": "<tier>"  to manifest.json
+# This integration targets Platinum; manifest.json declares
+# "quality_scale": "platinum". hassfest validates that every rule below is
+# `done` or `exempt`.
 #
 # Status values: done | todo | exempt
 # https://developers.home-assistant.io/docs/core/integration-quality-scale/
@@ -52,15 +46,20 @@ rules:
   reauthentication-flow:
     status: exempt
     comment: Local BLE device with no credentials or auth.
-  test-coverage: done  # 100% in CI (612/612 stmts, all modules incl. Linux-only config_flow/diagnostics); enforced by --cov-fail-under=100 in the Tests workflow.
+  test-coverage: done  # 100% in CI (all modules incl. Linux-only config_flow/diagnostics); enforced by --cov-fail-under=100 in the Tests workflow.
 
   # ------------------------------------------------------------------ Gold ---
   devices: done
   diagnostics: done
   discovery: done
   discovery-update-info:
-    status: todo
-    comment: Refresh device info from Bluetooth re-discovery.
+    status: exempt
+    comment: >
+      BLE transport: the device's Bluetooth MAC is its immutable unique_id, and
+      HA's Bluetooth manager always resolves the freshest connectable BLEDevice
+      on connect — there is no IP/network address to refresh. The BTCR9 exposes
+      no Device Information Service, so there is no firmware/serial to update on
+      re-discovery either (cf. victron_ble, idasen_desk, switchbot).
   docs-data-update: done  # README "How Home Assistant stays in sync" — local_polling, 5-min slow poll + 1s×3 fast burst, no push, RF-remote lag.
   docs-examples: done  # README "Example automations" — temperature, presence, and bedtime-sleep-timer YAML.
   docs-known-limitations: done  # README documents AC-vs-DC direction and the timer-needs-fan-running rule
