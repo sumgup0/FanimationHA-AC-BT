@@ -18,10 +18,12 @@ jobs:
       - name: Checkout the repository
         uses: actions/checkout@v6
 
+      # Matches the Tests workflow: 3.14 is what pulls in a current Home
+      # Assistant, so strict typing is checked against the HA we actually run.
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.13"
+          python-version: "3.14"
 
       - name: Install dependencies
         run: |

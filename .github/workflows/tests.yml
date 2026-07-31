@@ -18,10 +18,13 @@ jobs:
       - name: Checkout the repository
         uses: actions/checkout@v6
 
+      # 3.14 is required to get a current Home Assistant: recent
+      # pytest-homeassistant-custom-component releases need >=3.14, so on 3.13
+      # pip silently resolved backwards and pinned us to HA 2026.2.3.
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.13"
+          python-version: "3.14"
 
       - name: Install dependencies
         run: |
