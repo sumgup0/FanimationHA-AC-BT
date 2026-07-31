@@ -1,5 +1,5 @@
 [tool.ruff]
-target-version = "py313"
+target-version = "py314"
 line-length = 120
 
 [tool.ruff.lint]
@@ -34,7 +34,10 @@ asyncio_mode = "auto"
 #   mypy custom_components/fanimation
 # A CI mypy job is added once every module — including the in-flux config flow
 # and fan platform (parked behind issues #4/#5) — type-checks clean under strict.
-python_version = "3.13"
+# Must track the CI interpreter: Home Assistant's own source now uses 3.14-only
+# syntax (PEP 758 parenthesis-free except), which mypy cannot parse when told to
+# assume 3.13 — it fails on HA's files before reaching ours.
+python_version = "3.14"
 strict = true
 warn_unused_ignores = true
 warn_redundant_casts = true
