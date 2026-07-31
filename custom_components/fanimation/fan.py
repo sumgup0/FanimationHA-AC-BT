@@ -22,9 +22,7 @@ from homeassistant.util.percentage import (
 from . import FanimationConfigEntry
 from .const import (
     CONF_DEFAULT_SPEED,
-    CONF_SPEED_COUNT,
     CONF_SUPPORTS_REVERSE,
-    DEFAULT_SPEED_COUNT,
     DEFAULT_SPEED_LAST_USED,
     DIR_FORWARD,
     DIR_REVERSE,
@@ -36,6 +34,7 @@ from .const import (
 )
 from .coordinator import FanimationCoordinator
 from .entity import FanimationEntity
+from .options import get_option, resolved_speed_count
 
 # Serialise commands: every BLE write goes through the shared device-level lock,
 # so one in-flight command at a time matches HA's BLE convention.
@@ -66,11 +65,7 @@ class FanimationFan(FanimationEntity, FanEntity):
         super().__init__(coordinator, entry.entry_id)
         self._entry_id = entry.entry_id
         self._attr_unique_id = f"{coordinator.device.mac}_fan"
-        # Speed count: options-flow value wins, then install-time data, then default.
-        self._speed_count = entry.options.get(
-            CONF_SPEED_COUNT,
-            entry.data.get(CONF_SPEED_COUNT, DEFAULT_SPEED_COUNT),
-        )
+        self._speed_count = resolved_speed_count(entry)
         self._attr_speed_count = self._speed_count
         self._last_speed = SPEED_LOW  # default for turn_on without speed
 
@@ -177,13 +172,6 @@ class FanimationFan(FanimationEntity, FanEntity):
             return None
         return DIRECTION_REVERSE if self.coordinator.data.direction == DIR_REVERSE else DIRECTION_FORWARD
 
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return extra state attributes."""
-        attrs = super().extra_state_attributes
-        attrs["rf_remote_sync"] = "State is verified before every command — RF remote changes are always respected"
-        return attrs
-
     async def async_turn_on(
         self,
         percentage: int | None = None,
@@ -196,9 +184,7 @@ class FanimationFan(FanimationEntity, FanEntity):
             return
 
         # Check for user-configured fixed default speed
-        default_speed = DEFAULT_SPEED_LAST_USED
-        if self.coordinator.config_entry and self.coordinator.config_entry.options:
-            default_speed = self.coordinator.config_entry.options.get(CONF_DEFAULT_SPEED, DEFAULT_SPEED_LAST_USED)
+        default_speed = get_option(self.coordinator.config_entry, CONF_DEFAULT_SPEED, DEFAULT_SPEED_LAST_USED)
 
         preset_speed = speed_for_preset(default_speed, self._speed_count)
         if preset_speed is not None:

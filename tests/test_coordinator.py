@@ -311,12 +311,22 @@ class TestFastPoll:
 
 
 class TestGetOptionFallback:
-    """Cover the _get_option default branch when no options are set."""
+    """The coordinator reads options through the shared helper (options.py)."""
 
-    def test_returns_default_without_options(self) -> None:
-        coordinator, _, _ = _make_coordinator()
-        coordinator.config_entry.options = {}  # falsy → fall through to default
-        assert coordinator._get_option("missing", "fallback") == "fallback"
+    @pytest.mark.asyncio
+    async def test_failure_handling_uses_defaults_without_options(self) -> None:
+        """With an empty options dict, failure handling falls back to defaults
+        (notification on, threshold 12) — exercising get_option's fallback
+        branch through the real call path."""
+        coordinator, mock_device, mock_hass = _make_coordinator()
+        coordinator.config_entry.options = {}  # falsy → fall through to defaults
+        coordinator.data = FanimationState(speed=1)
+        mock_device.async_get_status.side_effect = Exception("BLE timeout")
+
+        result = await coordinator._async_update_data()
+
+        assert result.speed == 1  # soft-unavailable: stale state returned
+        mock_hass.services.async_call.assert_awaited()  # default notify=True fired
 
 
 class TestNotificationEdgeCases:

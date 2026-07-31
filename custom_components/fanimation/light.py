@@ -16,6 +16,7 @@ from .const import (
     DOWNLIGHT_MAX,
 )
 from .entity import FanimationEntity
+from .options import get_option
 
 if TYPE_CHECKING:
     from .coordinator import FanimationCoordinator
@@ -82,13 +83,6 @@ class FanimationLight(FanimationEntity, LightEntity):
             self._last_brightness = data.downlight
         super()._handle_coordinator_update()
 
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return extra state attributes."""
-        attrs = super().extra_state_attributes
-        attrs["rf_remote_sync"] = "State is verified before every command — RF remote changes are always respected"
-        return attrs
-
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on the light."""
         if ATTR_BRIGHTNESS in kwargs:
@@ -97,11 +91,9 @@ class FanimationLight(FanimationEntity, LightEntity):
             fan_brightness = max(1, min(fan_brightness, DOWNLIGHT_MAX))
         else:
             # Check for user-configured fixed default brightness
-            default_brightness = DEFAULT_BRIGHTNESS_LAST_USED
-            if self.coordinator.config_entry and self.coordinator.config_entry.options:
-                default_brightness = self.coordinator.config_entry.options.get(
-                    CONF_DEFAULT_BRIGHTNESS, DEFAULT_BRIGHTNESS_LAST_USED
-                )
+            default_brightness = get_option(
+                self.coordinator.config_entry, CONF_DEFAULT_BRIGHTNESS, DEFAULT_BRIGHTNESS_LAST_USED
+            )
 
             if default_brightness > 0:
                 fan_brightness = default_brightness

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import timedelta
-from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -21,6 +20,7 @@ from .const import (
     POLL_SLOW,
 )
 from .device import FanimationDevice, FanimationState
+from .options import get_option
 
 
 class FanimationCoordinator(DataUpdateCoordinator[FanimationState]):
@@ -46,12 +46,6 @@ class FanimationCoordinator(DataUpdateCoordinator[FanimationState]):
     def connection_failures(self) -> int:
         """Return the number of consecutive connection failures."""
         return self._connection_failures
-
-    def _get_option(self, key: str, default: Any) -> Any:
-        """Read an option from the config entry, with fallback default."""
-        if self.config_entry and self.config_entry.options:
-            return self.config_entry.options.get(key, default)
-        return default
 
     async def _async_update_data(self) -> FanimationState:
         """Poll the fan for current state with tiered availability.
@@ -120,12 +114,12 @@ class FanimationCoordinator(DataUpdateCoordinator[FanimationState]):
         self._connection_failures += 1
 
         # --- Persistent notification (fires once on first failure) ---
-        notify = self._get_option(CONF_NOTIFY_ON_DISCONNECT, DEFAULT_NOTIFY_ON_DISCONNECT)
+        notify = get_option(self.config_entry, CONF_NOTIFY_ON_DISCONNECT, DEFAULT_NOTIFY_ON_DISCONNECT)
         if notify and self._connection_failures == 1:
             await self._async_create_notification()
 
         # --- Availability decision ---
-        threshold = self._get_option(CONF_UNAVAILABLE_THRESHOLD, DEFAULT_UNAVAILABLE_THRESHOLD)
+        threshold = get_option(self.config_entry, CONF_UNAVAILABLE_THRESHOLD, DEFAULT_UNAVAILABLE_THRESHOLD)
 
         if threshold > 0 and self._connection_failures >= threshold:
             # Hard unavailable — dismiss notification (HA shows unavailable natively).

@@ -50,6 +50,7 @@ from .const import (
     SPEED_COUNT_COMMON,
     fan_type_supports_reverse,
 )
+from .options import resolved_speed_count
 
 SERVICE_UUID = "0000e000-0000-1000-8000-00805f9b34fb"
 
@@ -377,10 +378,7 @@ class FanimationOptionsFlow(OptionsFlow):
 
     def _defaults_section_schema(self) -> vol.Schema:
         """Build schema for fan & light defaults section."""
-        current_speed_count = self.config_entry.options.get(
-            CONF_SPEED_COUNT,
-            self.config_entry.data.get(CONF_SPEED_COUNT, DEFAULT_SPEED_COUNT),
-        )
+        current_speed_count = resolved_speed_count(self.config_entry)
         # Default the reverse toggle from the detected fan type (ON only for
         # confirmed-reversible DC fans), read from the live coordinator state.
         coordinator = getattr(self.config_entry, "runtime_data", None)

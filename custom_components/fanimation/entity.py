@@ -33,7 +33,7 @@ class FanimationEntity(CoordinatorEntity[FanimationCoordinator]):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return connection status as a base attribute on all entities."""
+        """Return connection status and the RF-sync note on all entities."""
         failures = self.coordinator.connection_failures
         if failures == 0:
             status = "connected"
@@ -47,4 +47,7 @@ class FanimationEntity(CoordinatorEntity[FanimationCoordinator]):
                 time_str = f"~{minutes // 1440} day(s)"
             attempt_word = "attempt" if failures == 1 else "attempts"
             status = f"unreachable ({failures} {attempt_word}, {time_str})"
-        return {"connection_status": status}
+        return {
+            "connection_status": status,
+            "rf_remote_sync": "State is verified before every command — RF remote changes are always respected",
+        }
