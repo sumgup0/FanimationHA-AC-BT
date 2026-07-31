@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from typing import Any
 
 import voluptuous as vol
@@ -333,7 +334,19 @@ class FanimationConfigFlow(ConfigFlow, domain=DOMAIN):
             if entity_id:
                 entity_registry.async_update_entity(entity_id, new_unique_id=f"{new_mac}{suffix}")
         device_registry = dr.async_get(self.hass)
-        device = device_registry.async_get_device(identifiers={(DOMAIN, old_mac)})
+        # HA 2026.8 replaced identifier lookups with the entry-scoped
+        # async_get_device_by_identifier(); the old async_get_device() still
+        # works there and is supported until 2027.8. Resolve the new method at
+        # runtime instead of calling it directly — it does not exist at all on
+        # the HA versions hacs.json still advertises (2024.12+), where a direct
+        # call would raise AttributeError mid-reconfigure.
+        get_by_identifier: Callable[[tuple[str, str], str], dr.DeviceEntry | None] | None = getattr(
+            device_registry, "async_get_device_by_identifier", None
+        )
+        if get_by_identifier is not None:
+            device = get_by_identifier((DOMAIN, old_mac), entry.entry_id)
+        else:
+            device = device_registry.async_get_device(identifiers={(DOMAIN, old_mac)})
         if device:
             device_registry.async_update_device(
                 device.id,

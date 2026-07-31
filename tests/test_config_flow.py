@@ -624,6 +624,38 @@ class TestReconfigure:
         assert migrated.id == device.id
         assert device_registry.async_get_device(identifiers={(DOMAIN, TEST_MAC.upper())}) is None
 
+    async def test_reconfigure_migrates_on_pre_2026_8_device_registry(self, hass: HomeAssistant) -> None:
+        """The migration also works where async_get_device_by_identifier is absent.
+
+        That method arrived in HA 2026.8; hacs.json still advertises 2024.12+,
+        so the lookup is resolved at runtime with a fallback. Forcing it to None
+        exercises the legacy branch regardless of which HA the suite runs on.
+        """
+        entry = _existing_entry(hass)
+        device_registry = dr.async_get(hass)
+        device = device_registry.async_get_or_create(
+            config_entry_id=entry.entry_id,
+            identifiers={(DOMAIN, TEST_MAC.upper())},
+            connections={(dr.CONNECTION_BLUETOOTH, TEST_MAC.upper())},
+        )
+
+        result = await entry.start_reconfigure_flow(hass)
+        with (
+            patch.object(dr.DeviceRegistry, "async_get_device_by_identifier", None, create=True),
+            patch(_VALIDATE, AsyncMock(return_value=None)),
+            patch(_SETUP, return_value=True),
+        ):
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                user_input={CONF_MAC: OTHER_MAC, CONF_NAME: TEST_NAME},
+            )
+            await hass.async_block_till_done()
+
+        assert result["reason"] == "reconfigure_successful"
+        migrated = device_registry.async_get_device(identifiers={(DOMAIN, OTHER_MAC)})
+        assert migrated is not None
+        assert migrated.id == device.id
+
     async def test_reconfigure_collision_aborts(self, hass: HomeAssistant) -> None:
         entry = _existing_entry(hass)
         other = MockConfigEntry(
