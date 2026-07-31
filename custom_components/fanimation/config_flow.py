@@ -292,7 +292,12 @@ class FanimationConfigFlow(ConfigFlow, domain=DOMAIN):
                 if not errors:
                     if mac != reconfigure_entry.unique_id:
                         self._async_migrate_mac_registry(reconfigure_entry, mac)
-                    return self.async_update_reload_and_abort(
+                    # Deliberately the non-reloading variant: the entry's update
+                    # listener (see __init__) already reloads on any change.
+                    # Pairing a listener with a reloading flow method reloads
+                    # twice and races; HA warns on it since 2026.6 and makes it
+                    # an error in 2026.12.
+                    return self.async_update_and_abort(
                         reconfigure_entry,
                         unique_id=mac,
                         title=name,

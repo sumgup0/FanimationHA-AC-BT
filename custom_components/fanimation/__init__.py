@@ -32,8 +32,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: FanimationConfigEntry) -
     # Store coordinator on the config entry for platform access
     entry.runtime_data = coordinator
 
-    # Reload integration when options change
-    entry.async_on_unload(entry.add_update_listener(_async_options_updated))
+    # Single owner of reloads: this listener fires on ANY entry change (options
+    # flow, reconfigure flow), so the flows themselves must use non-reloading
+    # abort helpers — see async_step_reconfigure.
+    entry.async_on_unload(entry.add_update_listener(_async_entry_updated))
 
     # Forward setup to entity platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -41,9 +43,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: FanimationConfigEntry) -
     return True
 
 
-async def _async_options_updated(hass: HomeAssistant, entry: FanimationConfigEntry) -> None:
-    """Reload the integration when options change."""
-    LOGGER.info("Options changed for %s — reloading", entry.title)
+async def _async_entry_updated(hass: HomeAssistant, entry: FanimationConfigEntry) -> None:
+    """Reload the integration when the config entry changes.
+
+    Covers both the options flow and the reconfigure flow. Entity attributes
+    such as speed_count and the reverse-direction feature flag are fixed at
+    construction, so a reload is how a settings change takes effect. HA only
+    calls this when the entry actually changed, so an unchanged submit is a
+    no-op rather than a needless reconnect.
+    """
+    LOGGER.info("Configuration changed for %s — reloading", entry.title)
     await hass.config_entries.async_reload(entry.entry_id)
 
 
