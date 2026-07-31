@@ -11,7 +11,10 @@ from homeassistant.components import bluetooth
 from homeassistant.components.bluetooth import BluetoothServiceInfoBleak
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlowWithConfigEntry
 from homeassistant.const import CONF_MAC, CONF_NAME
+from homeassistant.core import callback
 from homeassistant.data_entry_flow import section
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import format_mac
 from homeassistant.helpers.selector import (
     NumberSelector,
@@ -270,6 +273,8 @@ class FanimationConfigFlow(ConfigFlow, domain=DOMAIN):
                     if not await self._async_validate_device(mac):
                         errors["base"] = "cannot_connect"
                 if not errors:
+                    if mac != reconfigure_entry.unique_id:
+                        self._async_migrate_mac_registry(reconfigure_entry, mac)
                     return self.async_update_reload_and_abort(
                         reconfigure_entry,
                         unique_id=mac,
@@ -288,6 +293,31 @@ class FanimationConfigFlow(ConfigFlow, domain=DOMAIN):
             ),
             errors=errors,
         )
+
+    @callback
+    def _async_migrate_mac_registry(self, entry: ConfigEntry, new_mac: str) -> None:
+        """Re-key device and entity registry rows when reconfigure changes the MAC.
+
+        Entity unique_ids (``{mac}_fan|_light|_timer``) and the device identity
+        both embed the MAC. Without this migration a MAC change orphans the old
+        device and its three entities and registers fresh ``_2``-suffixed ones,
+        silently breaking automations, dashboards, and history that reference
+        the fan.
+        """
+        old_mac = entry.data[CONF_MAC]
+        entity_registry = er.async_get(self.hass)
+        for domain, suffix in (("fan", "_fan"), ("light", "_light"), ("number", "_timer")):
+            entity_id = entity_registry.async_get_entity_id(domain, DOMAIN, f"{old_mac}{suffix}")
+            if entity_id:
+                entity_registry.async_update_entity(entity_id, new_unique_id=f"{new_mac}{suffix}")
+        device_registry = dr.async_get(self.hass)
+        device = device_registry.async_get_device(identifiers={(DOMAIN, old_mac)})
+        if device:
+            device_registry.async_update_device(
+                device.id,
+                new_identifiers={(DOMAIN, new_mac)},
+                new_connections={(dr.CONNECTION_BLUETOOTH, new_mac)},
+            )
 
 
 class FanimationOptionsFlow(OptionsFlowWithConfigEntry):

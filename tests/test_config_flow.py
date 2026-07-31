@@ -27,6 +27,8 @@ from homeassistant.components.bluetooth import BluetoothServiceInfoBleak
 from homeassistant.const import CONF_MAC, CONF_NAME
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.fanimation.const import CONF_SPEED_COUNT, DOMAIN
@@ -508,6 +510,54 @@ class TestReconfigure:
             )
         assert result["type"] is FlowResultType.FORM
         assert result["errors"] == {"base": "cannot_connect"}
+
+    async def test_reconfigure_mac_change_migrates_device_and_entity_registries(self, hass: HomeAssistant) -> None:
+        """Changing the MAC must re-key the existing device + entities, not orphan them.
+
+        Entity unique_ids and the device identifiers embed the MAC. Without
+        migration, the reload after reconfigure registers a brand-new device and
+        three new ``_2``-suffixed entities while the originals go permanently
+        unavailable — silently breaking automations, dashboards, and history.
+        """
+        entry = _existing_entry(hass)
+        device_registry = dr.async_get(hass)
+        entity_registry = er.async_get(hass)
+        device = device_registry.async_get_or_create(
+            config_entry_id=entry.entry_id,
+            identifiers={(DOMAIN, TEST_MAC.upper())},
+            connections={(dr.CONNECTION_BLUETOOTH, TEST_MAC.upper())},
+        )
+        old_entity_ids = {}
+        for domain, suffix in (("fan", "_fan"), ("light", "_light"), ("number", "_timer")):
+            old_entity_ids[domain] = entity_registry.async_get_or_create(
+                domain,
+                DOMAIN,
+                f"{TEST_MAC.upper()}{suffix}",
+                config_entry=entry,
+                device_id=device.id,
+            ).entity_id
+
+        result = await entry.start_reconfigure_flow(hass)
+        with (
+            patch(_VALIDATE, AsyncMock(return_value=True)),
+            patch(_SETUP, return_value=True),
+        ):
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                user_input={CONF_MAC: OTHER_MAC, CONF_NAME: TEST_NAME},
+            )
+            await hass.async_block_till_done()
+        assert result["reason"] == "reconfigure_successful"
+
+        # The same entity_ids are now keyed by the new-MAC unique_ids; the old
+        # unique_ids resolve to nothing (no orphans left behind).
+        for domain, suffix in (("fan", "_fan"), ("light", "_light"), ("number", "_timer")):
+            assert entity_registry.async_get_entity_id(domain, DOMAIN, f"{OTHER_MAC}{suffix}") == old_entity_ids[domain]
+            assert entity_registry.async_get_entity_id(domain, DOMAIN, f"{TEST_MAC.upper()}{suffix}") is None
+        migrated = device_registry.async_get_device(identifiers={(DOMAIN, OTHER_MAC)})
+        assert migrated is not None
+        assert migrated.id == device.id
+        assert device_registry.async_get_device(identifiers={(DOMAIN, TEST_MAC.upper())}) is None
 
     async def test_reconfigure_collision_aborts(self, hass: HomeAssistant) -> None:
         entry = _existing_entry(hass)
