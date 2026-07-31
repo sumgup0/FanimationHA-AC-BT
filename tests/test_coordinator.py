@@ -68,6 +68,26 @@ class TestTieredAvailability:
         assert coordinator.connection_failures == 0
 
     @pytest.mark.asyncio
+    async def test_first_failure_timestamp_marks_streak_start(self) -> None:
+        """``first_failure_at`` pins the START of a failure streak and clears on
+        recovery — it feeds the real-elapsed-downtime connection_status."""
+        coordinator, mock_device, _ = _make_coordinator()
+        coordinator.data = FanimationState(speed=1)
+        mock_device.async_get_status.side_effect = Exception("BLE timeout")
+
+        await coordinator._async_update_data()
+        started = coordinator.first_failure_at
+        assert started is not None
+
+        await coordinator._async_update_data()  # second failure: streak start unchanged
+        assert coordinator.first_failure_at == started
+
+        mock_device.async_get_status.side_effect = None
+        mock_device.async_get_status.return_value = FanimationState(speed=1)
+        await coordinator._async_update_data()
+        assert coordinator.first_failure_at is None
+
+    @pytest.mark.asyncio
     async def test_failure_below_threshold_returns_last_state(self) -> None:
         coordinator, mock_device, _ = _make_coordinator(unavailable_threshold=12)
         coordinator.data = FanimationState(speed=2, downlight=50)

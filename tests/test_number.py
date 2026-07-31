@@ -7,13 +7,15 @@ cancel / no-state edge cases, the extra-state attributes, and platform setup.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.util import dt as dt_util
 
-from custom_components.fanimation.const import DOMAIN, POLL_SLOW
+from custom_components.fanimation.const import DOMAIN
 from custom_components.fanimation.device import FanimationState
 
 
@@ -38,6 +40,7 @@ def _make_coordinator(speed: int = 1, timer_minutes: int = 0):
     coordinator.async_start_fast_poll = AsyncMock()
     coordinator.data = FanimationState(speed=speed, timer_minutes=timer_minutes)
     coordinator.connection_failures = 0
+    coordinator.first_failure_at = None
     return coordinator
 
 
@@ -152,32 +155,55 @@ async def test_async_setup_entry_adds_single_timer() -> None:
 
 
 class TestConnectionStatus:
-    """Cover the base entity's connection_status formatting (entity.py)."""
+    """Cover the base entity's connection_status formatting (entity.py).
+
+    The elapsed time comes from the coordinator's ``first_failure_at`` streak
+    timestamp — real downtime, not a failure-count estimate (which overstated
+    wildly during 1 s fast-poll bursts).
+    """
 
     def test_connected_when_no_failures(self) -> None:
         timer, coordinator = _make_timer()
         coordinator.connection_failures = 0
         assert timer.extra_state_attributes["connection_status"] == "connected"
 
+    def test_fresh_failure_burst_shows_under_a_minute(self) -> None:
+        """3 fast-poll failures seconds apart must read '<1 min', not '~15 min'."""
+        timer, coordinator = _make_timer()
+        coordinator.connection_failures = 3
+        coordinator.first_failure_at = dt_util.utcnow() - timedelta(seconds=3)
+        status = timer.extra_state_attributes["connection_status"]
+        assert status == "unreachable (3 attempts, <1 min)"
+
+    def test_missing_streak_timestamp_falls_back_to_under_a_minute(self) -> None:
+        timer, coordinator = _make_timer()
+        coordinator.connection_failures = 1
+        coordinator.first_failure_at = None
+        assert "<1 min" in timer.extra_state_attributes["connection_status"]
+
     def test_single_failure_is_singular(self) -> None:
         timer, coordinator = _make_timer()
         coordinator.connection_failures = 1
+        coordinator.first_failure_at = dt_util.utcnow() - timedelta(minutes=5)
         status = timer.extra_state_attributes["connection_status"]
-        assert status == f"unreachable (1 attempt, ~{POLL_SLOW // 60} min)"
+        assert status == "unreachable (1 attempt, ~5 min)"
 
     def test_minutes_window_is_plural(self) -> None:
         timer, coordinator = _make_timer()
         coordinator.connection_failures = 2
+        coordinator.first_failure_at = dt_util.utcnow() - timedelta(minutes=10)
         status = timer.extra_state_attributes["connection_status"]
         assert "2 attempts" in status
-        assert "min" in status
+        assert "~10 min" in status
 
     def test_hours_window(self) -> None:
         timer, coordinator = _make_timer()
-        coordinator.connection_failures = 3600 // POLL_SLOW  # 60 min → "~1 hr"
-        assert "hr" in timer.extra_state_attributes["connection_status"]
+        coordinator.connection_failures = 12
+        coordinator.first_failure_at = dt_util.utcnow() - timedelta(hours=2)
+        assert "~2 hr" in timer.extra_state_attributes["connection_status"]
 
     def test_days_window(self) -> None:
         timer, coordinator = _make_timer()
-        coordinator.connection_failures = 86400 // POLL_SLOW  # 1440 min → "~1 day(s)"
-        assert "day(s)" in timer.extra_state_attributes["connection_status"]
+        coordinator.connection_failures = 288
+        coordinator.first_failure_at = dt_util.utcnow() - timedelta(days=3)
+        assert "~3 day(s)" in timer.extra_state_attributes["connection_status"]

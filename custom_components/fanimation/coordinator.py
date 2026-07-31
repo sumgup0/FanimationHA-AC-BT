@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_NOTIFY_ON_DISCONNECT,
@@ -38,6 +39,9 @@ class FanimationCoordinator(DataUpdateCoordinator[FanimationState]):
         self.device = device
         self._fast_poll_remaining = 0
         self._connection_failures = 0
+        # Streak start for real elapsed-downtime reporting: failure count alone
+        # can't tell 3 slow polls (15 min) from a 3-cycle fast-poll burst (~3 s).
+        self._first_failure_at: datetime | None = None
         self._notification_active = False
         # Gate the "unreachable" warning so it logs once on loss, not every poll.
         self._unavailable_logged = False
@@ -46,6 +50,11 @@ class FanimationCoordinator(DataUpdateCoordinator[FanimationState]):
     def connection_failures(self) -> int:
         """Return the number of consecutive connection failures."""
         return self._connection_failures
+
+    @property
+    def first_failure_at(self) -> datetime | None:
+        """Return when the current failure streak started (None when healthy)."""
+        return self._first_failure_at
 
     async def _async_update_data(self) -> FanimationState:
         """Poll the fan for current state with tiered availability.
@@ -80,6 +89,7 @@ class FanimationCoordinator(DataUpdateCoordinator[FanimationState]):
         # --- Success ---
         failures = self._connection_failures
         self._connection_failures = 0
+        self._first_failure_at = None
 
         # Recovery housekeeping. Log restoration once, but only if we logged the
         # loss ourselves (soft-unavailable path). Once we've escalated to
@@ -112,6 +122,8 @@ class FanimationCoordinator(DataUpdateCoordinator[FanimationState]):
         unavailable) based on the configured threshold.
         """
         self._connection_failures += 1
+        if self._connection_failures == 1:
+            self._first_failure_at = dt_util.utcnow()
 
         # --- Persistent notification (fires once on first failure) ---
         notify = get_option(self.config_entry, CONF_NOTIFY_ON_DISCONNECT, DEFAULT_NOTIFY_ON_DISCONNECT)

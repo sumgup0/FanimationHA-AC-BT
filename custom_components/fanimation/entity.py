@@ -6,8 +6,9 @@ from typing import Any
 
 from homeassistant.helpers.device_registry import CONNECTION_BLUETOOTH, DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, POLL_SLOW
+from .const import DOMAIN
 from .coordinator import FanimationCoordinator
 
 
@@ -38,8 +39,14 @@ class FanimationEntity(CoordinatorEntity[FanimationCoordinator]):
         if failures == 0:
             status = "connected"
         else:
-            minutes = failures * POLL_SLOW // 60
-            if minutes < 60:
+            # Real elapsed downtime from the streak start. A failure-count
+            # estimate (count x POLL_SLOW) overstates wildly during 1 s
+            # fast-poll bursts: 3 failures in ~3 s would read as "~15 min".
+            started = self.coordinator.first_failure_at
+            minutes = 0 if started is None else int((dt_util.utcnow() - started).total_seconds() // 60)
+            if minutes < 1:
+                time_str = "<1 min"
+            elif minutes < 60:
                 time_str = f"~{minutes} min"
             elif minutes < 1440:
                 time_str = f"~{minutes // 60} hr"
