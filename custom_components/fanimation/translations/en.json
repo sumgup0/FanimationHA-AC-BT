@@ -37,13 +37,15 @@
       }
     },
     "error": {
-      "cannot_connect": "Could not connect to the fan. Make sure it is powered on and within Bluetooth range.",
+      "cannot_connect": "Could not connect to the fan. Make sure it is powered on and within Bluetooth range, and close the FanSync app if it is connected (the fan accepts only one Bluetooth connection at a time).",
       "invalid_mac": "That doesn't look like a MAC address. Use the form AA:BB:CC:DD:EE:FF (colons, dashes, or no separator all work).",
+      "not_fanimation": "This device does not appear to be a Fanimation fan (expected GATT characteristics not found).",
       "unknown": "An unexpected error occurred."
     },
     "abort": {
       "already_configured": "This fan is already configured.",
       "already_in_progress": "This fan is already being set up (it was auto-discovered). Finish or cancel that setup instead of adding it manually.",
+      "cannot_connect": "Could not connect to the fan. Make sure it is powered on and within Bluetooth range, and close the FanSync app if it is connected (the fan accepts only one Bluetooth connection at a time).",
       "not_fanimation": "This device does not appear to be a Fanimation fan (expected GATT characteristics not found).",
       "reconfigure_successful": "The fan was reconfigured successfully."
     }

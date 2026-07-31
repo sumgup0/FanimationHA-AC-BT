@@ -183,6 +183,32 @@ class TestBluetoothDiscovery:
         assert result["type"] is FlowResultType.ABORT
         assert result["reason"] == "not_fanimation"
 
+    async def test_discovery_busy_fan_aborts_with_cannot_connect(self, hass: HomeAssistant) -> None:
+        """A genuine fan that refuses the connection must NOT be called not-a-Fanimation.
+
+        The BTCR9 accepts a single BLE connection, so a fan busy with the
+        FanSync app fails at *connect* time. Regression guard: this used to
+        abort with the misleading ``not_fanimation`` reason.
+        """
+        with (
+            patch(
+                "custom_components.fanimation.config_flow.bluetooth.async_ble_device_from_address",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "custom_components.fanimation.config_flow.establish_connection",
+                side_effect=Exception("device busy"),
+            ),
+        ):
+            result = await hass.config_entries.flow.async_init(
+                DOMAIN,
+                context={"source": config_entries.SOURCE_BLUETOOTH},
+                data=FAKE_DISCOVERY,
+            )
+
+        assert result["type"] is FlowResultType.ABORT
+        assert result["reason"] == "cannot_connect"
+
 
 # ---------------------------------------------------------------------------
 # Manual MAC entry flow
@@ -345,6 +371,45 @@ class TestManualEntry:
         assert result["type"] is FlowResultType.FORM
         assert result["errors"] == {"base": "cannot_connect"}
 
+    async def test_manual_gatt_inspection_failure_shows_cannot_connect(self, hass: HomeAssistant) -> None:
+        """An error while inspecting services (or disconnecting) maps to cannot_connect.
+
+        Also exercises the best-effort disconnect: a failing ``disconnect()``
+        must not mask the validation verdict.
+        """
+        with (
+            patch(
+                "custom_components.fanimation.config_flow.bluetooth.async_ble_device_from_address",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "custom_components.fanimation.config_flow.establish_connection",
+            ) as mock_conn,
+        ):
+            mock_client = AsyncMock()
+            services = MagicMock()
+            services.get_characteristic = MagicMock(side_effect=Exception("GATT read failed"))
+            mock_client.services = services
+            mock_client.disconnect = AsyncMock(side_effect=Exception("already dropped"))
+            mock_conn.return_value = mock_client
+
+            result = await hass.config_entries.flow.async_init(
+                DOMAIN,
+                context={"source": config_entries.SOURCE_USER},
+            )
+
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                user_input={
+                    CONF_MAC: TEST_MAC,
+                    CONF_NAME: TEST_NAME,
+                    CONF_SPEED_COUNT: "3",
+                },
+            )
+
+        assert result["type"] is FlowResultType.FORM
+        assert result["errors"] == {"base": "cannot_connect"}
+
 
 # ---------------------------------------------------------------------------
 # Duplicate MAC prevention
@@ -453,7 +518,7 @@ class TestReconfigure:
         result = await entry.start_reconfigure_flow(hass)
 
         with (
-            patch(_VALIDATE, AsyncMock(return_value=True)) as mock_validate,
+            patch(_VALIDATE, AsyncMock(return_value=None)) as mock_validate,
             patch(_SETUP, return_value=True),
         ):
             result = await hass.config_entries.flow.async_configure(
@@ -475,7 +540,7 @@ class TestReconfigure:
         result = await entry.start_reconfigure_flow(hass)
 
         with (
-            patch(_VALIDATE, AsyncMock(return_value=True)) as mock_validate,
+            patch(_VALIDATE, AsyncMock(return_value=None)) as mock_validate,
             patch(_SETUP, return_value=True),
         ):
             result = await hass.config_entries.flow.async_configure(
@@ -503,7 +568,7 @@ class TestReconfigure:
     async def test_reconfigure_unreachable_shows_error(self, hass: HomeAssistant) -> None:
         entry = _existing_entry(hass)
         result = await entry.start_reconfigure_flow(hass)
-        with patch(_VALIDATE, AsyncMock(return_value=False)):
+        with patch(_VALIDATE, AsyncMock(return_value="cannot_connect")):
             result = await hass.config_entries.flow.async_configure(
                 result["flow_id"],
                 user_input={CONF_MAC: OTHER_MAC, CONF_NAME: TEST_NAME},
@@ -539,7 +604,7 @@ class TestReconfigure:
 
         result = await entry.start_reconfigure_flow(hass)
         with (
-            patch(_VALIDATE, AsyncMock(return_value=True)),
+            patch(_VALIDATE, AsyncMock(return_value=None)),
             patch(_SETUP, return_value=True),
         ):
             result = await hass.config_entries.flow.async_configure(

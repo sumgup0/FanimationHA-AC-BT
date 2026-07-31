@@ -110,15 +110,20 @@ class FanimationConfigFlow(ConfigFlow, domain=DOMAIN):
         self._mac: str = ""
         self._discovered_name: str = ""
 
-    async def _async_validate_device(self, mac: str) -> bool:
+    async def _async_validate_device(self, mac: str) -> str | None:
         """Connect to the fan and verify expected GATT characteristics exist.
 
-        Returns True if the device looks like a Fanimation BTCR9.
-        This is the test-before-configure check.
+        Returns ``None`` when the device looks like a Fanimation BTCR9, else an
+        error code: ``cannot_connect`` (not found or connection failed) versus
+        ``not_fanimation`` (reachable but wrong GATT). The BTCR9 accepts only
+        one BLE connection at a time, so a genuine fan that is busy with the
+        FanSync app fails to *connect* — the distinction keeps it from being
+        misreported as "not a Fanimation fan". This is the test-before-configure
+        check.
         """
         ble_device = bluetooth.async_ble_device_from_address(self.hass, mac.upper(), connectable=True)
         if not ble_device:
-            return False
+            return "cannot_connect"
 
         try:
             client = await establish_connection(
@@ -127,25 +132,32 @@ class FanimationConfigFlow(ConfigFlow, domain=DOMAIN):
                 name="config_flow_validation",
                 max_attempts=2,
             )
-            try:
-                # Verify the expected service and characteristics exist
-                services = client.services
-                write_char = services.get_characteristic(CHAR_WRITE)
-                notify_char = services.get_characteristic(CHAR_NOTIFY)
-                if write_char is None or notify_char is None:
-                    LOGGER.debug(
-                        "Device %s missing expected characteristics (write=%s, notify=%s)",
-                        mac,
-                        write_char,
-                        notify_char,
-                    )
-                    return False
-                return True
-            finally:
-                await client.disconnect()
         except Exception as err:
             LOGGER.debug("Validation connect to %s failed: %s", mac, err)
-            return False
+            return "cannot_connect"
+
+        try:
+            # Verify the expected service and characteristics exist
+            services = client.services
+            write_char = services.get_characteristic(CHAR_WRITE)
+            notify_char = services.get_characteristic(CHAR_NOTIFY)
+            if write_char is None or notify_char is None:
+                LOGGER.debug(
+                    "Device %s missing expected characteristics (write=%s, notify=%s)",
+                    mac,
+                    write_char,
+                    notify_char,
+                )
+                return "not_fanimation"
+            return None
+        except Exception as err:
+            LOGGER.debug("Validation of %s failed after connect: %s", mac, err)
+            return "cannot_connect"
+        finally:
+            try:
+                await client.disconnect()
+            except Exception:  # noqa: S110
+                pass  # Best-effort cleanup; the verdict above already stands
 
     async def async_step_bluetooth(self, discovery_info: BluetoothServiceInfoBleak) -> ConfigFlowResult:
         """Handle Bluetooth discovery."""
@@ -165,8 +177,8 @@ class FanimationConfigFlow(ConfigFlow, domain=DOMAIN):
 
         # Validate the device has the expected GATT characteristics
         # (prevents false positives from other devices named "CeilingFan")
-        if not await self._async_validate_device(self._mac):
-            return self.async_abort(reason="not_fanimation")
+        if error := await self._async_validate_device(self._mac):
+            return self.async_abort(reason=error)
 
         # Show confirmation to user
         self.context["title_placeholders"] = {
@@ -226,8 +238,8 @@ class FanimationConfigFlow(ConfigFlow, domain=DOMAIN):
 
                 # Test-before-configure: verify the device is reachable
                 # and has the expected GATT characteristics
-                if not await self._async_validate_device(mac):
-                    errors["base"] = "cannot_connect"
+                if error := await self._async_validate_device(mac):
+                    errors["base"] = error
                 else:
                     return self.async_create_entry(
                         title=name,
@@ -270,8 +282,8 @@ class FanimationConfigFlow(ConfigFlow, domain=DOMAIN):
                     # MAC changed: re-key the entry and re-validate the new device.
                     await self.async_set_unique_id(mac)
                     self._abort_if_unique_id_configured()
-                    if not await self._async_validate_device(mac):
-                        errors["base"] = "cannot_connect"
+                    if error := await self._async_validate_device(mac):
+                        errors["base"] = error
                 if not errors:
                     if mac != reconfigure_entry.unique_id:
                         self._async_migrate_mac_registry(reconfigure_entry, mac)
