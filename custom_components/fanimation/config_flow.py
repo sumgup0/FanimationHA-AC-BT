@@ -9,7 +9,7 @@ import voluptuous as vol
 from bleak_retry_connector import BleakClientWithServiceCache, establish_connection
 from homeassistant.components import bluetooth
 from homeassistant.components.bluetooth import BluetoothServiceInfoBleak
-from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlowWithConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.const import CONF_MAC, CONF_NAME
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import section
@@ -100,8 +100,12 @@ class FanimationConfigFlow(ConfigFlow, domain=DOMAIN):
 
     @staticmethod
     def async_get_options_flow(config_entry: ConfigEntry) -> FanimationOptionsFlow:
-        """Return the options flow handler."""
-        return FanimationOptionsFlow(config_entry)
+        """Return the options flow handler.
+
+        No-arg construction: HA injects the entry, exposed via the
+        ``OptionsFlow.config_entry`` property.
+        """
+        return FanimationOptionsFlow()
 
     def __init__(self) -> None:
         """Initialize the config flow."""
@@ -332,8 +336,14 @@ class FanimationConfigFlow(ConfigFlow, domain=DOMAIN):
             )
 
 
-class FanimationOptionsFlow(OptionsFlowWithConfigEntry):
-    """Handle options for Fanimation BLE."""
+class FanimationOptionsFlow(OptionsFlow):
+    """Handle options for Fanimation BLE.
+
+    Subclasses plain ``OptionsFlow``: the ``OptionsFlowWithConfigEntry`` base
+    is deprecated ("should not be referenced in new code", kept only for
+    custom-integration back-compat) and this flow never needed its mutable
+    options copy — all reads go straight to ``self.config_entry.options``.
+    """
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Manage the options."""
@@ -367,7 +377,7 @@ class FanimationOptionsFlow(OptionsFlowWithConfigEntry):
 
     def _defaults_section_schema(self) -> vol.Schema:
         """Build schema for fan & light defaults section."""
-        current_speed_count = self.options.get(
+        current_speed_count = self.config_entry.options.get(
             CONF_SPEED_COUNT,
             self.config_entry.data.get(CONF_SPEED_COUNT, DEFAULT_SPEED_COUNT),
         )
@@ -384,7 +394,7 @@ class FanimationOptionsFlow(OptionsFlowWithConfigEntry):
                 ): _speed_count_field(),
                 vol.Required(
                     CONF_DEFAULT_SPEED,
-                    default=self.options.get(CONF_DEFAULT_SPEED, DEFAULT_SPEED_LAST_USED),
+                    default=self.config_entry.options.get(CONF_DEFAULT_SPEED, DEFAULT_SPEED_LAST_USED),
                 ): SelectSelector(
                     SelectSelectorConfig(
                         options=[
@@ -399,11 +409,11 @@ class FanimationOptionsFlow(OptionsFlowWithConfigEntry):
                 ),
                 vol.Required(
                     CONF_DEFAULT_BRIGHTNESS,
-                    default=self.options.get(CONF_DEFAULT_BRIGHTNESS, DEFAULT_BRIGHTNESS_LAST_USED),
+                    default=self.config_entry.options.get(CONF_DEFAULT_BRIGHTNESS, DEFAULT_BRIGHTNESS_LAST_USED),
                 ): NumberSelector(NumberSelectorConfig(min=0, max=100, step=1, mode=NumberSelectorMode.SLIDER)),
                 vol.Required(
                     CONF_SUPPORTS_REVERSE,
-                    default=self.options.get(CONF_SUPPORTS_REVERSE, detected_reverse),
+                    default=self.config_entry.options.get(CONF_SUPPORTS_REVERSE, detected_reverse),
                 ): bool,
             }
         )
@@ -414,11 +424,11 @@ class FanimationOptionsFlow(OptionsFlowWithConfigEntry):
             {
                 vol.Required(
                     CONF_NOTIFY_ON_DISCONNECT,
-                    default=self.options.get(CONF_NOTIFY_ON_DISCONNECT, DEFAULT_NOTIFY_ON_DISCONNECT),
+                    default=self.config_entry.options.get(CONF_NOTIFY_ON_DISCONNECT, DEFAULT_NOTIFY_ON_DISCONNECT),
                 ): bool,
                 vol.Required(
                     CONF_UNAVAILABLE_THRESHOLD,
-                    default=self.options.get(CONF_UNAVAILABLE_THRESHOLD, DEFAULT_UNAVAILABLE_THRESHOLD),
+                    default=self.config_entry.options.get(CONF_UNAVAILABLE_THRESHOLD, DEFAULT_UNAVAILABLE_THRESHOLD),
                 ): NumberSelector(
                     NumberSelectorConfig(
                         min=0,
