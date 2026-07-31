@@ -24,13 +24,12 @@ from homeassistant.const import CONF_MAC, CONF_NAME
 from custom_components.fanimation.const import CONF_SPEED_COUNT
 from custom_components.fanimation.device import FanimationState
 
-from .conftest import TEST_MAC, TEST_NAME
+from .conftest import TEST_MAC, TEST_NAME, make_mock_coordinator
 
 
 def _make_entry(state: FanimationState | None, *, failures: int = 0):
     """Build a config entry whose runtime_data is a mocked coordinator."""
-    coordinator = MagicMock()
-    coordinator.data = state
+    coordinator = make_mock_coordinator(state)
     coordinator.last_update_success = state is not None
     coordinator.update_interval = None
     coordinator.connection_failures = failures

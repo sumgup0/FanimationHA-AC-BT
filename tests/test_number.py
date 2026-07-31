@@ -18,9 +18,11 @@ from homeassistant.util import dt as dt_util
 from custom_components.fanimation.const import DOMAIN
 from custom_components.fanimation.device import FanimationState
 
+from .conftest import make_mock_coordinator
+
 
 def _make_coordinator(speed: int = 1, timer_minutes: int = 0):
-    """Build a mocked coordinator shaped like the real one (see test_light.py).
+    """Build a mocked coordinator (shared factory in conftest).
 
     ``async_set_state`` emulates the BTCR9 firmware rule under test: a timer
     only takes while the motor runs (``speed`` here plays the *actual* motor
@@ -32,15 +34,8 @@ def _make_coordinator(speed: int = 1, timer_minutes: int = 0):
         accepted = timer_minutes if (timer_minutes is not None and speed > 0) else 0
         return FanimationState(speed=speed, timer_minutes=accepted)
 
-    coordinator = MagicMock()
-    coordinator.device = MagicMock()
-    coordinator.device.mac = "AA:BB:CC:DD:EE:FF"
-    coordinator.device.name = "Test Fan"
+    coordinator = make_mock_coordinator(FanimationState(speed=speed, timer_minutes=timer_minutes))
     coordinator.device.async_set_state = AsyncMock(side_effect=_echo_state)
-    coordinator.async_start_fast_poll = AsyncMock()
-    coordinator.data = FanimationState(speed=speed, timer_minutes=timer_minutes)
-    coordinator.connection_failures = 0
-    coordinator.first_failure_at = None
     return coordinator
 
 

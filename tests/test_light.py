@@ -17,6 +17,8 @@ from custom_components.fanimation.const import (
 )
 from custom_components.fanimation.device import FanimationState
 
+from .conftest import make_mock_coordinator
+
 
 def _make_light(default_brightness: int = DEFAULT_BRIGHTNESS_LAST_USED):
     """Create a FanimationLight with mocked coordinator for unit testing.
@@ -31,17 +33,11 @@ def _make_light(default_brightness: int = DEFAULT_BRIGHTNESS_LAST_USED):
     async def _echo_state(downlight: int | None = None, **_kwargs: Any) -> FanimationState:
         return FanimationState(downlight=downlight if downlight is not None else 0)
 
-    mock_coordinator = MagicMock()
-    mock_coordinator.device = MagicMock()
-    mock_coordinator.device.mac = "AA:BB:CC:DD:EE:FF"
-    mock_coordinator.device.name = "Test Fan"
+    mock_coordinator = make_mock_coordinator(
+        FanimationState(downlight=0),
+        options={CONF_DEFAULT_BRIGHTNESS: default_brightness},
+    )
     mock_coordinator.device.async_set_state = AsyncMock(side_effect=_echo_state)
-    mock_coordinator.async_start_fast_poll = AsyncMock()
-    mock_coordinator.data = FanimationState(downlight=0)
-    mock_coordinator.connection_failures = 0
-    mock_coordinator.config_entry = MagicMock()
-    mock_coordinator.config_entry.options = {CONF_DEFAULT_BRIGHTNESS: default_brightness}
-    mock_coordinator.config_entry.entry_id = "test_entry"
 
     light = FanimationLight(mock_coordinator, "test_entry")
     return light, mock_coordinator

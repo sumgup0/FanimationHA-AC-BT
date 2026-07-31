@@ -37,6 +37,19 @@ def _leaf_paths(obj: Any, prefix: str = "") -> list[str]:
     return [prefix]
 
 
+def test_translations_en_is_exact_copy_of_strings() -> None:
+    """``translations/en.json`` must be byte-identical to ``strings.json``.
+
+    ``strings.json`` is the developer source; HA serves ``translations/en.json``
+    for custom components. They are kept identical by hand — no build step, by
+    design (the parity is trivial to restore and this gate makes drift
+    unmergeable). If this fails: copy strings.json over translations/en.json.
+    """
+    assert _STRINGS.read_text(encoding="utf-8") == _TRANSLATIONS.read_text(encoding="utf-8"), (
+        "translations/en.json has drifted from strings.json — copy strings.json over it"
+    )
+
+
 def test_strings_and_translations_have_identical_keys() -> None:
     """``strings.json`` (dev source) and ``translations/en.json`` (runtime) must match.
 

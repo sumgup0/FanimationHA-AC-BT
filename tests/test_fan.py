@@ -29,6 +29,8 @@ from custom_components.fanimation.const import (
 )
 from custom_components.fanimation.device import FanimationState
 
+from .conftest import make_mock_coordinator
+
 
 def _make_fan(
     default_speed: str = DEFAULT_SPEED_LAST_USED,
@@ -57,17 +59,8 @@ def _make_fan(
     if supports_reverse is not None:
         options[CONF_SUPPORTS_REVERSE] = supports_reverse
 
-    mock_coordinator = MagicMock()
-    mock_coordinator.device = MagicMock()
-    mock_coordinator.device.mac = "AA:BB:CC:DD:EE:FF"
-    mock_coordinator.device.name = "Test Fan"
+    mock_coordinator = make_mock_coordinator(FanimationState(speed=0, fan_type=fan_type), options=options)
     mock_coordinator.device.async_set_state = AsyncMock(side_effect=_echo_state)
-    mock_coordinator.async_start_fast_poll = AsyncMock()
-    mock_coordinator.data = FanimationState(speed=0, fan_type=fan_type)
-    mock_coordinator.connection_failures = 0
-    mock_coordinator.config_entry = MagicMock()
-    mock_coordinator.config_entry.options = dict(options)
-    mock_coordinator.config_entry.entry_id = "test_entry"
 
     mock_entry = MagicMock()
     mock_entry.entry_id = "test_entry"
