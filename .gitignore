@@ -37,7 +37,8 @@ Thumbs.db
 # Playwright MCP browser-automation screenshots
 .playwright-mcp/
 
-# Source PNG assets (pre-resize originals — final assets live in brand_images/)
+# Source PNG assets (pre-resize originals; the shipped assets live in
+# custom_components/fanimation/brand/, served by HA's 2026.3+ brand proxy)
 /icon_raw.png
 /logo_raw.png
 
