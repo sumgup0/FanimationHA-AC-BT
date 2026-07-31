@@ -5,6 +5,7 @@ Pure unit tests — no HA test harness required.
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -18,14 +19,23 @@ from custom_components.fanimation.device import FanimationState
 
 
 def _make_light(default_brightness: int = DEFAULT_BRIGHTNESS_LAST_USED):
-    """Create a FanimationLight with mocked coordinator for unit testing."""
+    """Create a FanimationLight with mocked coordinator for unit testing.
+
+    ``async_set_state`` echoes the requested brightness back as a verified
+    ``FanimationState`` (the hardware accepting the command), mirroring the
+    fan tests — ``_last_brightness`` bookkeeping reads from the verified
+    response. Tests simulating rejection/comm failure override the mock.
+    """
     from custom_components.fanimation.light import FanimationLight
+
+    async def _echo_state(downlight: int | None = None, **_kwargs: Any) -> FanimationState:
+        return FanimationState(downlight=downlight if downlight is not None else 0)
 
     mock_coordinator = MagicMock()
     mock_coordinator.device = MagicMock()
     mock_coordinator.device.mac = "AA:BB:CC:DD:EE:FF"
     mock_coordinator.device.name = "Test Fan"
-    mock_coordinator.device.async_set_state = AsyncMock()
+    mock_coordinator.device.async_set_state = AsyncMock(side_effect=_echo_state)
     mock_coordinator.async_start_fast_poll = AsyncMock()
     mock_coordinator.data = FanimationState(downlight=0)
     mock_coordinator.connection_failures = 0
@@ -145,3 +155,63 @@ class TestLightMisc:
         await light.async_turn_off()
         coord.device.async_set_state.assert_called_once_with(downlight=0)
         coord.async_start_fast_poll.assert_awaited_once()
+
+
+class TestLastBrightnessBookkeeping:
+    """``_last_brightness`` must reflect what the *hardware confirmed*, not what
+    was requested — the same lesson as the fan's ``_last_speed`` (Issue #1).
+    """
+
+    @pytest.mark.asyncio
+    async def test_last_brightness_synced_to_verified_response(self) -> None:
+        light, _ = _make_light()
+        await light.async_turn_on(**{"brightness": 128})  # HA 128 → fan 50
+        assert light._last_brightness == 50
+
+    @pytest.mark.asyncio
+    async def test_last_brightness_not_updated_on_communication_failure(self) -> None:
+        """A None response (BLE failure) must not pin an unapplied value."""
+        light, coord = _make_light()
+        light._last_brightness = 75
+        coord.device.async_set_state = AsyncMock(return_value=None)
+
+        await light.async_turn_on(**{"brightness": 255})
+
+        assert light._last_brightness == 75
+
+    @pytest.mark.asyncio
+    async def test_last_brightness_not_updated_when_hardware_reports_off(self) -> None:
+        """A verified 'light off' response must not become the last-used level."""
+        light, coord = _make_light()
+        light._last_brightness = 75
+        coord.device.async_set_state = AsyncMock(return_value=FanimationState(downlight=0))
+
+        await light.async_turn_on(**{"brightness": 255})
+
+        assert light._last_brightness == 75
+
+    def test_brightness_getter_has_no_side_effects(self) -> None:
+        """Reading ``brightness`` must not mutate ``_last_brightness`` — RF
+        tracking lives in the coordinator-update hook, not the getter."""
+        light, coord = _make_light()
+        light._last_brightness = 75
+        coord.data = FanimationState(downlight=22)
+
+        assert light.brightness == round(22 * 255 / DOWNLIGHT_MAX)
+        assert light._last_brightness == 75
+
+    def test_coordinator_update_tracks_rf_remote_brightness(self) -> None:
+        """A poll showing a non-zero brightness (e.g. set via RF remote) becomes
+        the new last-used value; an off state leaves it alone."""
+        light, coord = _make_light()
+        light.async_write_ha_state = MagicMock()
+        light._last_brightness = 75
+
+        coord.data = FanimationState(downlight=22)
+        light._handle_coordinator_update()
+        assert light._last_brightness == 22
+
+        coord.data = FanimationState(downlight=0)
+        light._handle_coordinator_update()
+        assert light._last_brightness == 22  # off does not clobber last-used
+        assert light.async_write_ha_state.call_count == 2

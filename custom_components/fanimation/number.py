@@ -75,13 +75,20 @@ class FanimationTimer(FanimationEntity, NumberEntity):
     async def async_set_native_value(self, value: float) -> None:
         """Set the sleep timer.
 
-        The BTCR9 controller silently ignores the timer when the fan motor
-        is off (speed=0), regardless of whether the light is on.
+        The BTCR9 controller silently ignores the timer when the fan motor is
+        off (speed=0), regardless of whether the light is on. That rule is
+        enforced from the device's *verified* response, not the coordinator
+        cache: the cache can be minutes stale, so a fan just switched on by
+        the RF remote (not yet polled) must not be spuriously rejected. If the
+        verified state shows the timer did not take, surface the translatable
+        error. A ``None`` response (BLE failure) raises nothing here —
+        availability is the coordinator's concern.
         """
-        if int(value) > 0 and self.coordinator.data and self.coordinator.data.speed == 0:
+        minutes = int(value)
+        state = await self.coordinator.device.async_set_state(timer_minutes=minutes)
+        await self.coordinator.async_start_fast_poll()
+        if minutes > 0 and state is not None and state.timer_minutes == 0:
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="timer_requires_fan_on",
             )
-        await self.coordinator.device.async_set_state(timer_minutes=int(value))
-        await self.coordinator.async_start_fast_poll()

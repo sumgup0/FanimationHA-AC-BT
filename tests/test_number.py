@@ -7,6 +7,7 @@ cancel / no-state edge cases, the extra-state attributes, and platform setup.
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -17,12 +18,23 @@ from custom_components.fanimation.device import FanimationState
 
 
 def _make_coordinator(speed: int = 1, timer_minutes: int = 0):
-    """Build a mocked coordinator shaped like the real one (see test_light.py)."""
+    """Build a mocked coordinator shaped like the real one (see test_light.py).
+
+    ``async_set_state`` emulates the BTCR9 firmware rule under test: a timer
+    only takes while the motor runs (``speed`` here plays the *actual* motor
+    state), otherwise the verified response reads timer 0. Tests that need a
+    different device behaviour override the mock's ``return_value``.
+    """
+
+    async def _echo_state(timer_minutes: int | None = None, **_kwargs: Any) -> FanimationState:
+        accepted = timer_minutes if (timer_minutes is not None and speed > 0) else 0
+        return FanimationState(speed=speed, timer_minutes=accepted)
+
     coordinator = MagicMock()
     coordinator.device = MagicMock()
     coordinator.device.mac = "AA:BB:CC:DD:EE:FF"
     coordinator.device.name = "Test Fan"
-    coordinator.device.async_set_state = AsyncMock()
+    coordinator.device.async_set_state = AsyncMock(side_effect=_echo_state)
     coordinator.async_start_fast_poll = AsyncMock()
     coordinator.data = FanimationState(speed=speed, timer_minutes=timer_minutes)
     coordinator.connection_failures = 0
@@ -61,6 +73,7 @@ async def test_set_timer_while_running_sends_command() -> None:
 
 @pytest.mark.asyncio
 async def test_set_timer_while_fan_off_raises_translatable() -> None:
+    """Fan really off → firmware ignores the timer (verified 0) → translatable error."""
     timer, coordinator = _make_timer(speed=0)
 
     with pytest.raises(HomeAssistantError) as exc_info:
@@ -69,7 +82,9 @@ async def test_set_timer_while_fan_off_raises_translatable() -> None:
     # The rule under test: a translation_key, not a hard-coded English message.
     assert exc_info.value.translation_domain == DOMAIN
     assert exc_info.value.translation_key == "timer_requires_fan_on"
-    coordinator.device.async_set_state.assert_not_called()
+    # The command is attempted (the firmware ignores it harmlessly); the error
+    # comes from the verified response, not a pre-check against cached state.
+    coordinator.device.async_set_state.assert_called_once_with(timer_minutes=30)
 
 
 @pytest.mark.asyncio
@@ -83,14 +98,31 @@ async def test_cancel_timer_allowed_while_fan_off() -> None:
 
 
 @pytest.mark.asyncio
-async def test_set_timer_without_state_does_not_raise() -> None:
-    # No coordinator data yet → the running-check is skipped and the command is sent.
-    timer, coordinator = _make_timer(speed=0)
-    coordinator.data = None
+async def test_set_timer_trusts_device_over_stale_cache() -> None:
+    """RF-remote regression: cached state says the fan is off, but it is actually
+    running (the remote change hasn't been polled yet). The timer must be
+    accepted based on the device's verified response, not rejected up front
+    from minutes-stale cache."""
+    timer, coordinator = _make_timer(speed=0)  # cache: off
+    coordinator.device.async_set_state = AsyncMock(
+        return_value=FanimationState(speed=2, timer_minutes=45)  # hardware: running
+    )
+
+    await timer.async_set_native_value(45)  # must not raise
+
+    coordinator.device.async_set_state.assert_called_once_with(timer_minutes=45)
+
+
+@pytest.mark.asyncio
+async def test_set_timer_comm_failure_does_not_raise() -> None:
+    """A None response (BLE failure) must not surface as 'fan must be running' —
+    availability is the coordinator's concern, not a timer misuse."""
+    timer, coordinator = _make_timer(speed=1)
+    coordinator.device.async_set_state = AsyncMock(return_value=None)
 
     await timer.async_set_native_value(30)
 
-    coordinator.device.async_set_state.assert_called_once_with(timer_minutes=30)
+    coordinator.async_start_fast_poll.assert_awaited_once()
 
 
 def test_extra_state_attributes_extend_base() -> None:

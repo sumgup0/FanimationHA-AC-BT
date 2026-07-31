@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.light import ATTR_BRIGHTNESS, LightEntity
 from homeassistant.components.light.const import ColorMode
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import FanimationConfigEntry
@@ -66,12 +66,21 @@ class FanimationLight(FanimationEntity, LightEntity):
         """Return brightness (HA 0-255 scale)."""
         if self.coordinator.data is None:
             return None
-        fan_brightness = self.coordinator.data.downlight
-        # Track last non-zero brightness (picks up RF remote changes too)
-        if fan_brightness > 0:
-            self._last_brightness = fan_brightness
         # Scale fan 0-100 → HA 0-255
-        return round(fan_brightness * 255 / DOWNLIGHT_MAX)
+        return round(self.coordinator.data.downlight * 255 / DOWNLIGHT_MAX)
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Track the last non-zero brightness from each poll, then write state.
+
+        Polling is the only way RF-remote changes reach us, so "last used"
+        brightness is captured here — a state hook — rather than as a side
+        effect inside the ``brightness`` getter.
+        """
+        data = self.coordinator.data
+        if data is not None and data.downlight > 0:
+            self._last_brightness = data.downlight
+        super()._handle_coordinator_update()
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -100,8 +109,12 @@ class FanimationLight(FanimationEntity, LightEntity):
                 # 0 means "last_used" — current behavior
                 fan_brightness = self._last_brightness
 
-        self._last_brightness = fan_brightness
-        await self.coordinator.device.async_set_state(downlight=fan_brightness)
+        # ``_last_brightness`` is updated from the *verified* response, not the
+        # requested value — same lesson as the fan's ``_last_speed`` (Issue #1):
+        # a value the hardware didn't actually apply must not become "last used".
+        state = await self.coordinator.device.async_set_state(downlight=fan_brightness)
+        if state is not None and state.downlight > 0:
+            self._last_brightness = state.downlight
         await self.coordinator.async_start_fast_poll()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
