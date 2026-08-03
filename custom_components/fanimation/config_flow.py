@@ -55,21 +55,31 @@ from .options import resolved_speed_count
 
 SERVICE_UUID = "0000e000-0000-1000-8000-00805f9b34fb"
 
-# Canonical MAC form after format_mac() normalization: lowercase colon-separated.
-_MAC_RE = re.compile(r"^([0-9a-f]{2}:){5}[0-9a-f]{2}$")
+# Separators a hand-typed MAC might contain, in any combination; and the bare
+# 12 hex digits that must remain once they are stripped.
+_MAC_SEPARATORS = re.compile(r"[\s:.\-]")
+_MAC_HEX = re.compile(r"^[0-9a-f]{12}$")
 
 
 def _normalize_mac(raw: str) -> str | None:
     """Normalise user MAC input to canonical uppercase colon form, or None if invalid.
 
-    Accepts colon / dash / dot / bare-hex via ``format_mac``; validates the result
-    against ``_MAC_RE`` before upper-casing. Shared by ``async_step_user`` and
-    ``async_step_reconfigure`` so the validation lives in one place.
+    Separators are stripped before validating rather than pattern-matched, so any
+    mixture is accepted — ``50:8C:B1:4A16:A0`` and ``50 8C B1 4A 16 A0`` work as
+    well as the consistent forms. ``format_mac`` alone is not enough: it only
+    recognises all-colon, all-dash, dotted or bare input and silently returns
+    anything else unchanged, so a partially separated address (easy to produce by
+    hand, or by an interrupted copy-paste) was rejected as invalid. It still does
+    the final formatting, so the canonical form stays whatever HA considers
+    canonical.
+
+    Shared by ``async_step_user`` and ``async_step_reconfigure`` so the validation
+    lives in one place.
     """
-    normalized = format_mac(raw.strip())
-    if not _MAC_RE.match(normalized):
+    hex_only = _MAC_SEPARATORS.sub("", raw.strip()).lower()
+    if not _MAC_HEX.match(hex_only):
         return None
-    return normalized.upper()
+    return format_mac(hex_only).upper()
 
 
 def _speed_count_field() -> vol.All:
