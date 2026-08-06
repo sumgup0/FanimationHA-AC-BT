@@ -37,6 +37,19 @@ def _leaf_paths(obj: Any, prefix: str = "") -> list[str]:
     return [prefix]
 
 
+def test_translations_en_is_exact_copy_of_strings() -> None:
+    """``translations/en.json`` must be byte-identical to ``strings.json``.
+
+    ``strings.json`` is the developer source; HA serves ``translations/en.json``
+    for custom components. They are kept identical by hand — no build step, by
+    design (the parity is trivial to restore and this gate makes drift
+    unmergeable). If this fails: copy strings.json over translations/en.json.
+    """
+    assert _STRINGS.read_text(encoding="utf-8") == _TRANSLATIONS.read_text(encoding="utf-8"), (
+        "translations/en.json has drifted from strings.json — copy strings.json over it"
+    )
+
+
 def test_strings_and_translations_have_identical_keys() -> None:
     """``strings.json`` (dev source) and ``translations/en.json`` (runtime) must match.
 
@@ -93,3 +106,31 @@ def test_config_flow_error_and_abort_keys_are_translated() -> None:
         missing_aborts = abort_keys - set(config.get("abort", {}))
         assert not missing_errors, f"{name}: config.error is missing {sorted(missing_errors)}"
         assert not missing_aborts, f"{name}: config.abort is missing {sorted(missing_aborts)}"
+
+
+def _raised_translation_keys() -> set[str]:
+    """Collect ``translation_key`` values from ``raise <Error>(..., translation_key="x")``.
+
+    Walks every module in the component so any HomeAssistantError raised with a
+    ``translation_key`` is covered, not just today's sleep-timer one. A key present
+    here but absent from ``exceptions`` in the JSON renders as a raw key in the UI.
+    """
+    keys: set[str] = set()
+    for path in sorted(_COMPONENT.glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Raise) and isinstance(node.exc, ast.Call):
+                for keyword in node.exc.keywords:
+                    if keyword.arg == "translation_key" and isinstance(keyword.value, ast.Constant):
+                        keys.add(keyword.value.value)
+    return keys
+
+
+def test_raised_exception_keys_are_translated() -> None:
+    """Every ``raise ...(translation_key=...)`` key exists under ``exceptions`` in both files."""
+    keys = _raised_translation_keys()
+    assert keys, "expected at least one raise(..., translation_key=...) in the component"
+
+    for name, data in (("strings.json", _load(_STRINGS)), ("translations/en.json", _load(_TRANSLATIONS))):
+        missing = keys - set(data.get("exceptions", {}))
+        assert not missing, f"{name}: exceptions is missing {sorted(missing)}"

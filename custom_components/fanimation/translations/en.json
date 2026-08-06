@@ -23,17 +23,31 @@
         "data_description": {
           "speed_count": "Pick or type the number of speeds your fan supports. AC fans are usually 3; DC fans are commonly 6 or 32. You can change this later in the integration's options."
         }
+      },
+      "reconfigure": {
+        "title": "Reconfigure Fanimation Ceiling Fan",
+        "description": "Update the Bluetooth address or name for this fan. The fan must be in range to change the address.",
+        "data": {
+          "mac": "MAC address",
+          "name": "Friendly name"
+        },
+        "data_description": {
+          "mac": "Find it with a BLE scanner app (look for a device named CeilingFan). Any separators work — colons, dashes, dots, spaces, or none."
+        }
       }
     },
     "error": {
-      "cannot_connect": "Could not connect to the fan. Make sure it is powered on and within Bluetooth range.",
-      "invalid_mac": "That doesn't look like a MAC address. Use the form AA:BB:CC:DD:EE:FF (colons, dashes, or no separator all work).",
+      "cannot_connect": "Could not connect to the fan. Make sure it is powered on and within Bluetooth range, and close the FanSync app if it is connected (the fan accepts only one Bluetooth connection at a time).",
+      "invalid_mac": "That doesn't look like a MAC address. It needs 12 hex digits, as in AA:BB:CC:DD:EE:FF — colons, dashes, dots, spaces, or no separator at all are all fine, and they don't have to be consistent.",
+      "not_fanimation": "This device does not appear to be a Fanimation fan (expected GATT characteristics not found).",
       "unknown": "An unexpected error occurred."
     },
     "abort": {
       "already_configured": "This fan is already configured.",
       "already_in_progress": "This fan is already being set up (it was auto-discovered). Finish or cancel that setup instead of adding it manually.",
-      "not_fanimation": "This device does not appear to be a Fanimation fan (expected GATT characteristics not found)."
+      "cannot_connect": "Could not connect to the fan. Make sure it is powered on and within Bluetooth range, and close the FanSync app if it is connected (the fan accepts only one Bluetooth connection at a time).",
+      "not_fanimation": "This device does not appear to be a Fanimation fan (expected GATT characteristics not found).",
+      "reconfigure_successful": "The fan was reconfigured successfully."
     }
   },
   "options": {
@@ -93,6 +107,17 @@
       "sleep_timer": {
         "name": "Sleep timer"
       }
+    }
+  },
+  "exceptions": {
+    "timer_requires_fan_on": {
+      "message": "The sleep timer only works when the fan is running. Turn the fan on first, then set the timer."
+    }
+  },
+  "issues": {
+    "speed_count_out_of_range": {
+      "title": "{name}: fan speed exceeds the configured speed count",
+      "description": "{name} reported speed {reported_speed}, but it is set to only {speed_count} speeds, so Home Assistant is clamping the speed slider to its maximum. Speeds set above this with the RF remote will read as the top step.\n\nTo fix this, open the integration options (Settings → Devices & Services → Fanimation BLE Ceiling Fan → Configure) and set **Number of fan speeds** to match your fan's hardware. AC fans are usually 3; DC fans are commonly 6 or 32."
     }
   }
 }

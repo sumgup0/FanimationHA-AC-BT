@@ -1,3 +1,13 @@
 pytest
 pytest-asyncio
-pytest-homeassistant-custom-component
+pytest-cov
+# Pinned on purpose. This package tracks Home Assistant releases one-for-one,
+# INCLUDING betas, so unpinned CI rides pre-release HA (it landed on 2026.8.0b2).
+# 0.13.354 is the newest release tracking a *stable* HA — 2026.8.0. Requires
+# Python >= 3.14, which the workflows now provide.
+#
+# Bump this when a new stable HA ships; letting it drift recreates the silent
+# staleness it replaced, just visibly. To find the next one: list the package's
+# releases and pick the highest whose `homeassistant==` pin has no `b` suffix.
+pytest-homeassistant-custom-component==0.13.354
+mypy

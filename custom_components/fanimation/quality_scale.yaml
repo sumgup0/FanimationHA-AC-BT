@@ -1,0 +1,98 @@
+# Home Assistant Integration Quality Scale — Fanimation BLE Ceiling Fan.
+#
+# This integration targets Platinum; manifest.json declares
+# "quality_scale": "platinum". hassfest validates that every rule below is
+# `done` or `exempt`.
+#
+# Status values: done | todo | exempt
+# https://developers.home-assistant.io/docs/core/integration-quality-scale/
+
+rules:
+  # ---------------------------------------------------------------- Bronze ---
+  action-setup:
+    status: exempt
+    comment: Provides entities only; registers no service actions.
+  appropriate-polling: done
+  brands:
+    status: exempt
+    comment: Custom (HACS) integration; brand assets are bundled, not in home-assistant/brands.
+  common-modules: done
+  config-flow-test-coverage: done
+  config-flow: done
+  dependency-transparency: done
+  docs-actions:
+    status: exempt
+    comment: No service actions.
+  docs-conditions:
+    status: exempt
+    comment: Registers no conditions; provides entities only (HA's built-in entity conditions need no integration docs).
+  docs-high-level-description: done
+  docs-installation-instructions: done
+  docs-removal-instructions: done  # all Bronze rules now done/exempt
+  docs-triggers:
+    status: exempt
+    comment: Registers no triggers; provides entities only (HA's built-in entity triggers need no integration docs).
+  entity-event-setup: done
+  entity-unique-id: done
+  has-entity-name: done
+  runtime-data: done
+  test-before-configure: done
+  test-before-setup: done
+  unique-config-entry: done
+
+  # ---------------------------------------------------------------- Silver ---
+  action-exceptions: done
+  config-entry-unloading: done
+  docs-configuration-parameters: done  # README "Options" documents all six options-flow parameters
+  docs-installation-parameters: done  # README documents the MAC + speed-count setup fields (name field is self-evident)
+  entity-unavailable: done
+  integration-owner: done
+  log-when-unavailable: done
+  parallel-updates: done  # all three platforms (fan, light, number) set PARALLEL_UPDATES = 1
+  reauthentication-flow:
+    status: exempt
+    comment: Local BLE device with no credentials or auth.
+  test-coverage: done  # 100% in CI (all modules incl. Linux-only config_flow/diagnostics); enforced by --cov-fail-under=100 in the Tests workflow.
+
+  # ------------------------------------------------------------------ Gold ---
+  devices: done
+  diagnostics: done
+  discovery: done
+  discovery-update-info:
+    status: exempt
+    comment: >
+      BLE transport: the device's Bluetooth MAC is its immutable unique_id, and
+      HA's Bluetooth manager always resolves the freshest connectable BLEDevice
+      on connect — there is no IP/network address to refresh. The BTCR9 exposes
+      no Device Information Service, so there is no firmware/serial to update on
+      re-discovery either (cf. victron_ble, idasen_desk, switchbot).
+  docs-data-update: done  # README "How Home Assistant stays in sync" — local_polling, 5-min slow poll + 1s×3 fast burst, no push, RF-remote lag.
+  docs-examples: done  # README "Example automations" — temperature, presence, and bedtime-sleep-timer YAML.
+  docs-known-limitations: done  # README documents AC-vs-DC direction and the timer-needs-fan-running rule
+  docs-supported-devices: done
+  docs-supported-functions: done
+  docs-troubleshooting: done  # README "Troubleshooting" section
+  docs-use-cases: done  # README "Use cases" — why integrate + combine-with-other-devices (temperature, presence, voice, dashboards).
+  dynamic-devices:
+    status: exempt
+    comment: One physical device per config entry.
+  entity-category: done  # No category: fan/light/timer are primary controls. The timer is operational with live state and triggers a primary action, so CONFIG/DIAGNOSTIC don't fit; config-like settings live in the options flow, not entities.
+  entity-device-class: done
+  entity-disabled-by-default:
+    status: exempt
+    comment: All three entities are primary controls.
+  entity-translations: done
+  exception-translations: done  # sleep-timer HomeAssistantError uses translation_key; transport ConnectionError/ValueError are internal, not user-facing
+  icon-translations: done
+  reconfiguration-flow: done  # async_step_reconfigure (change MAC/name in place) + 6 TestReconfigure cases; pytest green in CI (PR #9).
+  repair-issues: done  # WARNING repair issue when a fan reports speed > configured speed_count (fan.py _evaluate_speed_count_issue); points user at the options flow, self-clears when back in range. Issue #1 follow-up.
+  stale-devices:
+    status: exempt
+    comment: One physical device per config entry.
+
+  # -------------------------------------------------------------- Platinum ---
+  async-dependency: done
+  inject-websession:
+    status: exempt
+    comment: BLE transport; there is no HTTP session to inject.
+  strict-typing: done  # mypy --strict clean (0 errors, 89791a6); CI mypy job (.github/workflows/mypy.yml) green in PR #9.

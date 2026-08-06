@@ -9,7 +9,7 @@ Pure unit tests — no HA test harness required. Cover:
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.components.fan import DIRECTION_FORWARD, DIRECTION_REVERSE, FanEntityFeature
@@ -28,6 +28,8 @@ from custom_components.fanimation.const import (
     speed_for_preset,
 )
 from custom_components.fanimation.device import FanimationState
+
+from .conftest import make_mock_coordinator
 
 
 def _make_fan(
@@ -57,17 +59,8 @@ def _make_fan(
     if supports_reverse is not None:
         options[CONF_SUPPORTS_REVERSE] = supports_reverse
 
-    mock_coordinator = MagicMock()
-    mock_coordinator.device = MagicMock()
-    mock_coordinator.device.mac = "AA:BB:CC:DD:EE:FF"
-    mock_coordinator.device.name = "Test Fan"
+    mock_coordinator = make_mock_coordinator(FanimationState(speed=0, fan_type=fan_type), options=options)
     mock_coordinator.device.async_set_state = AsyncMock(side_effect=_echo_state)
-    mock_coordinator.async_start_fast_poll = AsyncMock()
-    mock_coordinator.data = FanimationState(speed=0, fan_type=fan_type)
-    mock_coordinator.connection_failures = 0
-    mock_coordinator.config_entry = MagicMock()
-    mock_coordinator.config_entry.options = dict(options)
-    mock_coordinator.config_entry.entry_id = "test_entry"
 
     mock_entry = MagicMock()
     mock_entry.entry_id = "test_entry"
@@ -340,3 +333,141 @@ class TestIssue4Direction:
         fan, coord = _make_fan(fan_type=2)
         await fan.async_set_direction(DIRECTION_FORWARD)
         coord.device.async_set_state.assert_called_once_with(direction=DIR_FORWARD)
+
+
+class TestFanMisc:
+    """Cover setup, is_on, percentage-without-data, and extra attributes."""
+
+    @pytest.mark.asyncio
+    async def test_async_setup_entry_adds_one_fan(self) -> None:
+        from custom_components.fanimation.fan import FanimationFan, async_setup_entry
+
+        _, coordinator = _make_fan()
+        entry = MagicMock()
+        entry.runtime_data = coordinator
+        entry.entry_id = "test_entry"
+        entry.options = {}
+        entry.data = {CONF_SPEED_COUNT: 3}
+
+        added: list = []
+        await async_setup_entry(MagicMock(), entry, lambda e: added.extend(e))
+
+        assert len(added) == 1
+        assert isinstance(added[0], FanimationFan)
+
+    def test_is_on_true_when_running(self) -> None:
+        fan, coord = _make_fan()
+        coord.data = FanimationState(speed=2)
+        assert fan.is_on is True
+
+    def test_is_on_false_when_off(self) -> None:
+        fan, coord = _make_fan()
+        coord.data = FanimationState(speed=0)
+        assert fan.is_on is False
+
+    def test_is_on_none_without_data(self) -> None:
+        fan, coord = _make_fan()
+        coord.data = None
+        assert fan.is_on is None
+
+    def test_percentage_none_without_data(self) -> None:
+        fan, coord = _make_fan()
+        coord.data = None
+        assert fan.percentage is None
+
+    def test_extra_state_attributes(self) -> None:
+        fan, _ = _make_fan()
+        attrs = fan.extra_state_attributes
+        assert "rf_remote_sync" in attrs
+        assert attrs["connection_status"] == "connected"
+
+
+class TestSpeedCountRepairIssue:
+    """repair-issues (Gold): raise a repair when the fan reports speed > speed_count.
+
+    Issue #1 follow-up: the ``percentage`` clamp keeps the slider usable when a
+    fan reports a hardware speed above the configured count (e.g. a 32-speed DC
+    fan left at the default 3). This rule surfaces *why* it's pegged and how to
+    fix it — a user-actionable misconfiguration, resolved in the options flow.
+    """
+
+    @staticmethod
+    def _ready_fan(speed_count: int = 3, speed: int = 0):
+        """A fan that has been 'added to hass': coordinator data + a hass handle."""
+        fan, coord = _make_fan(speed_count=speed_count)
+        fan.hass = MagicMock()
+        coord.data = FanimationState(speed=speed)
+        return fan, coord
+
+    def test_issue_raised_when_speed_exceeds_count(self) -> None:
+        fan, _ = self._ready_fan(speed_count=3, speed=5)
+        with (
+            patch("custom_components.fanimation.fan.ir.async_create_issue") as create,
+            patch("custom_components.fanimation.fan.ir.async_delete_issue") as delete,
+        ):
+            fan._evaluate_speed_count_issue()
+
+        delete.assert_not_called()
+        create.assert_called_once()
+        args, kwargs = create.call_args
+        assert args[1] == "fanimation"  # DOMAIN
+        assert args[2] == "speed_count_out_of_range_test_entry"  # issue_id keyed on entry
+        assert kwargs["is_fixable"] is False
+        assert kwargs["severity"].name == "WARNING"
+        assert kwargs["translation_key"] == "speed_count_out_of_range"
+        assert kwargs["translation_placeholders"] == {
+            "name": "Test Fan",
+            "reported_speed": "5",
+            "speed_count": "3",
+        }
+
+    @pytest.mark.parametrize("speed", [0, 1, 2, 3])
+    def test_issue_cleared_when_speed_in_range(self, speed: int) -> None:
+        """In-range (incl. off and the boundary speed==count) clears any open issue."""
+        fan, _ = self._ready_fan(speed_count=3, speed=speed)
+        with (
+            patch("custom_components.fanimation.fan.ir.async_create_issue") as create,
+            patch("custom_components.fanimation.fan.ir.async_delete_issue") as delete,
+        ):
+            fan._evaluate_speed_count_issue()
+
+        create.assert_not_called()
+        delete.assert_called_once_with(fan.hass, "fanimation", "speed_count_out_of_range_test_entry")
+
+    def test_no_issue_created_without_data(self) -> None:
+        """No coordinator data yet (never polled) must not raise a false issue."""
+        fan, coord = self._ready_fan(speed_count=3)
+        coord.data = None
+        with (
+            patch("custom_components.fanimation.fan.ir.async_create_issue") as create,
+            patch("custom_components.fanimation.fan.ir.async_delete_issue") as delete,
+        ):
+            fan._evaluate_speed_count_issue()
+
+        create.assert_not_called()
+        delete.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_added_to_hass_evaluates_immediately(self) -> None:
+        """An already-out-of-range state at setup raises without waiting for a poll."""
+        fan, _ = self._ready_fan(speed_count=3, speed=5)
+        with patch("custom_components.fanimation.fan.ir.async_create_issue") as create:
+            await fan.async_added_to_hass()
+        create.assert_called_once()
+
+    def test_coordinator_update_evaluates_and_writes_state(self) -> None:
+        """The poll hook evaluates the issue and still writes entity state."""
+        fan, _ = self._ready_fan(speed_count=3, speed=5)
+        fan.async_write_ha_state = MagicMock()
+        with patch("custom_components.fanimation.fan.ir.async_create_issue") as create:
+            fan._handle_coordinator_update()
+        create.assert_called_once()
+        fan.async_write_ha_state.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_removal_clears_issue(self) -> None:
+        """Removing the entity (e.g. integration deletion) clears a lingering issue."""
+        fan, _ = self._ready_fan(speed_count=3, speed=5)
+        with patch("custom_components.fanimation.fan.ir.async_delete_issue") as delete:
+            await fan.async_will_remove_from_hass()
+        delete.assert_called_once_with(fan.hass, "fanimation", "speed_count_out_of_range_test_entry")

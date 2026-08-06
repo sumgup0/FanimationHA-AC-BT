@@ -28,7 +28,9 @@ CMD_GET_STATUS = 0x30
 CMD_SET_STATE = 0x31
 CMD_STATUS_RESPONSE = 0x32
 
-# Fan speed protocol values
+# Fan speed protocol values. Production code uses OFF/LOW only (presets scale
+# via speed_for_preset); MED/HIGH document the canonical 3-speed AC mapping
+# and serve the tests as named speeds.
 SPEED_OFF = 0
 SPEED_LOW = 1
 SPEED_MED = 2
@@ -53,8 +55,7 @@ MIN_SPEED_COUNT = 1
 MAX_SPEED_COUNT = 99
 SPEED_COUNT_COMMON: list[str] = ["1", "3", "6", "32"]
 
-# Downlight
-DOWNLIGHT_MIN = 0
+# Downlight brightness: protocol byte[5], 0 (off) to DOWNLIGHT_MAX percent
 DOWNLIGHT_MAX = 100
 
 # Timer

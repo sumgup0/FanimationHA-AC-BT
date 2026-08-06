@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_NOTIFY_ON_DISCONNECT,
@@ -20,6 +21,7 @@ from .const import (
     POLL_SLOW,
 )
 from .device import FanimationDevice, FanimationState
+from .options import get_option
 
 
 class FanimationCoordinator(DataUpdateCoordinator[FanimationState]):
@@ -37,18 +39,22 @@ class FanimationCoordinator(DataUpdateCoordinator[FanimationState]):
         self.device = device
         self._fast_poll_remaining = 0
         self._connection_failures = 0
+        # Streak start for real elapsed-downtime reporting: failure count alone
+        # can't tell 3 slow polls (15 min) from a 3-cycle fast-poll burst (~3 s).
+        self._first_failure_at: datetime | None = None
         self._notification_active = False
+        # Gate the "unreachable" warning so it logs once on loss, not every poll.
+        self._unavailable_logged = False
 
     @property
     def connection_failures(self) -> int:
         """Return the number of consecutive connection failures."""
         return self._connection_failures
 
-    def _get_option(self, key: str, default):
-        """Read an option from the config entry, with fallback default."""
-        if self.config_entry and self.config_entry.options:
-            return self.config_entry.options.get(key, default)
-        return default
+    @property
+    def first_failure_at(self) -> datetime | None:
+        """Return when the current failure streak started (None when healthy)."""
+        return self._first_failure_at
 
     async def _async_update_data(self) -> FanimationState:
         """Poll the fan for current state with tiered availability.
@@ -81,12 +87,22 @@ class FanimationCoordinator(DataUpdateCoordinator[FanimationState]):
             return await self._async_handle_failure(f"No response from {self.device.name}")
 
         # --- Success ---
-        was_failing = self._connection_failures > 0
+        failures = self._connection_failures
         self._connection_failures = 0
+        self._first_failure_at = None
 
-        # Dismiss notification on recovery
-        if was_failing:
+        # Recovery housekeeping. Log restoration once, but only if we logged the
+        # loss ourselves (soft-unavailable path). Once we've escalated to
+        # UpdateFailed, HA's coordinator owns the "recovered" message.
+        if failures > 0:
             await self._async_dismiss_notification()
+            if self._unavailable_logged:
+                LOGGER.info(
+                    "%s is reachable again after %d failed poll(s)",
+                    self.device.name,
+                    failures,
+                )
+                self._unavailable_logged = False
 
         # Manage fast/slow polling transition
         if self._fast_poll_remaining > 0:
@@ -106,27 +122,38 @@ class FanimationCoordinator(DataUpdateCoordinator[FanimationState]):
         unavailable) based on the configured threshold.
         """
         self._connection_failures += 1
+        if self._connection_failures == 1:
+            self._first_failure_at = dt_util.utcnow()
 
         # --- Persistent notification (fires once on first failure) ---
-        notify = self._get_option(CONF_NOTIFY_ON_DISCONNECT, DEFAULT_NOTIFY_ON_DISCONNECT)
+        notify = get_option(self.config_entry, CONF_NOTIFY_ON_DISCONNECT, DEFAULT_NOTIFY_ON_DISCONNECT)
         if notify and self._connection_failures == 1:
             await self._async_create_notification()
 
         # --- Availability decision ---
-        threshold = self._get_option(CONF_UNAVAILABLE_THRESHOLD, DEFAULT_UNAVAILABLE_THRESHOLD)
+        threshold = get_option(self.config_entry, CONF_UNAVAILABLE_THRESHOLD, DEFAULT_UNAVAILABLE_THRESHOLD)
 
         if threshold > 0 and self._connection_failures >= threshold:
-            # Hard unavailable — dismiss notification (HA shows unavailable natively)
+            # Hard unavailable — dismiss notification (HA shows unavailable natively).
+            # Hand logging off to HA's coordinator, which logs the UpdateFailed
+            # once and the recovery once via last_update_success.
             await self._async_dismiss_notification()
+            self._unavailable_logged = False
             raise UpdateFailed(f"{error_msg} after {self._connection_failures} attempts")
 
         if self.data is not None:
-            # Soft unavailable — return stale data, entities stay available
-            LOGGER.warning(
-                "%s (%d failures) — returning last known state",
-                error_msg,
-                self._connection_failures,
-            )
+            # Soft unavailable — return stale data, entities stay available.
+            # Warn once on the transition, then drop to debug so a fan that is
+            # unreachable for hours doesn't fill the log with one line per poll.
+            if not self._unavailable_logged:
+                LOGGER.warning("%s — returning last known state; will keep retrying", error_msg)
+                self._unavailable_logged = True
+            else:
+                LOGGER.debug(
+                    "%s (%d failures) — still returning last known state",
+                    error_msg,
+                    self._connection_failures,
+                )
             return self.data
 
         # No prior state at all — must raise regardless of threshold

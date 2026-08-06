@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from typing import Any
 
 import voluptuous as vol
 from bleak_retry_connector import BleakClientWithServiceCache, establish_connection
 from homeassistant.components import bluetooth
 from homeassistant.components.bluetooth import BluetoothServiceInfoBleak
-from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlowWithConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.const import CONF_MAC, CONF_NAME
+from homeassistant.core import callback
 from homeassistant.data_entry_flow import section
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import format_mac
 from homeassistant.helpers.selector import (
     NumberSelector,
@@ -47,11 +51,35 @@ from .const import (
     SPEED_COUNT_COMMON,
     fan_type_supports_reverse,
 )
+from .options import resolved_speed_count
 
 SERVICE_UUID = "0000e000-0000-1000-8000-00805f9b34fb"
 
-# Canonical MAC form after format_mac() normalization: lowercase colon-separated.
-_MAC_RE = re.compile(r"^([0-9a-f]{2}:){5}[0-9a-f]{2}$")
+# Separators a hand-typed MAC might contain, in any combination; and the bare
+# 12 hex digits that must remain once they are stripped.
+_MAC_SEPARATORS = re.compile(r"[\s:.\-]")
+_MAC_HEX = re.compile(r"^[0-9a-f]{12}$")
+
+
+def _normalize_mac(raw: str) -> str | None:
+    """Normalise user MAC input to canonical uppercase colon form, or None if invalid.
+
+    Separators are stripped before validating rather than pattern-matched, so any
+    mixture is accepted — ``50:8C:B1:4A16:A0`` and ``50 8C B1 4A 16 A0`` work as
+    well as the consistent forms. ``format_mac`` alone is not enough: it only
+    recognises all-colon, all-dash, dotted or bare input and silently returns
+    anything else unchanged, so a partially separated address (easy to produce by
+    hand, or by an interrupted copy-paste) was rejected as invalid. It still does
+    the final formatting, so the canonical form stays whatever HA considers
+    canonical.
+
+    Shared by ``async_step_user`` and ``async_step_reconfigure`` so the validation
+    lives in one place.
+    """
+    hex_only = _MAC_SEPARATORS.sub("", raw.strip()).lower()
+    if not _MAC_HEX.match(hex_only):
+        return None
+    return format_mac(hex_only).upper()
 
 
 def _speed_count_field() -> vol.All:
@@ -84,24 +112,34 @@ class FanimationConfigFlow(ConfigFlow, domain=DOMAIN):
 
     @staticmethod
     def async_get_options_flow(config_entry: ConfigEntry) -> FanimationOptionsFlow:
-        """Return the options flow handler."""
-        return FanimationOptionsFlow(config_entry)
+        """Return the options flow handler.
+
+        No-arg construction: HA injects the entry, exposed via the
+        ``OptionsFlow.config_entry`` property.
+        """
+        return FanimationOptionsFlow()
 
     def __init__(self) -> None:
         """Initialize the config flow."""
         self._discovery_info: BluetoothServiceInfoBleak | None = None
-        self._mac: str | None = None
-        self._discovered_name: str | None = None
+        # Populated during Bluetooth discovery before async_step_bluetooth_confirm; "" until then.
+        self._mac: str = ""
+        self._discovered_name: str = ""
 
-    async def _async_validate_device(self, mac: str) -> bool:
+    async def _async_validate_device(self, mac: str) -> str | None:
         """Connect to the fan and verify expected GATT characteristics exist.
 
-        Returns True if the device looks like a Fanimation BTCR9.
-        This is the test-before-configure check.
+        Returns ``None`` when the device looks like a Fanimation BTCR9, else an
+        error code: ``cannot_connect`` (not found or connection failed) versus
+        ``not_fanimation`` (reachable but wrong GATT). The BTCR9 accepts only
+        one BLE connection at a time, so a genuine fan that is busy with the
+        FanSync app fails to *connect* — the distinction keeps it from being
+        misreported as "not a Fanimation fan". This is the test-before-configure
+        check.
         """
         ble_device = bluetooth.async_ble_device_from_address(self.hass, mac.upper(), connectable=True)
         if not ble_device:
-            return False
+            return "cannot_connect"
 
         try:
             client = await establish_connection(
@@ -110,25 +148,32 @@ class FanimationConfigFlow(ConfigFlow, domain=DOMAIN):
                 name="config_flow_validation",
                 max_attempts=2,
             )
-            try:
-                # Verify the expected service and characteristics exist
-                services = client.services
-                write_char = services.get_characteristic(CHAR_WRITE)
-                notify_char = services.get_characteristic(CHAR_NOTIFY)
-                if write_char is None or notify_char is None:
-                    LOGGER.debug(
-                        "Device %s missing expected characteristics (write=%s, notify=%s)",
-                        mac,
-                        write_char,
-                        notify_char,
-                    )
-                    return False
-                return True
-            finally:
-                await client.disconnect()
         except Exception as err:
             LOGGER.debug("Validation connect to %s failed: %s", mac, err)
-            return False
+            return "cannot_connect"
+
+        try:
+            # Verify the expected service and characteristics exist
+            services = client.services
+            write_char = services.get_characteristic(CHAR_WRITE)
+            notify_char = services.get_characteristic(CHAR_NOTIFY)
+            if write_char is None or notify_char is None:
+                LOGGER.debug(
+                    "Device %s missing expected characteristics (write=%s, notify=%s)",
+                    mac,
+                    write_char,
+                    notify_char,
+                )
+                return "not_fanimation"
+            return None
+        except Exception as err:
+            LOGGER.debug("Validation of %s failed after connect: %s", mac, err)
+            return "cannot_connect"
+        finally:
+            try:
+                await client.disconnect()
+            except Exception:  # noqa: S110
+                pass  # Best-effort cleanup; the verdict above already stands
 
     async def async_step_bluetooth(self, discovery_info: BluetoothServiceInfoBleak) -> ConfigFlowResult:
         """Handle Bluetooth discovery."""
@@ -148,8 +193,8 @@ class FanimationConfigFlow(ConfigFlow, domain=DOMAIN):
 
         # Validate the device has the expected GATT characteristics
         # (prevents false positives from other devices named "CeilingFan")
-        if not await self._async_validate_device(self._mac):
-            return self.async_abort(reason="not_fanimation")
+        if error := await self._async_validate_device(self._mac):
+            return self.async_abort(reason=error)
 
         # Show confirmation to user
         self.context["title_placeholders"] = {
@@ -197,11 +242,10 @@ class FanimationConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            normalized = format_mac(user_input[CONF_MAC].strip())
-            if not _MAC_RE.match(normalized):
+            mac = _normalize_mac(user_input[CONF_MAC])
+            if mac is None:
                 errors[CONF_MAC] = "invalid_mac"
             else:
-                mac = normalized.upper()
                 name = user_input[CONF_NAME]
 
                 # Set unique ID to prevent duplicates
@@ -210,8 +254,8 @@ class FanimationConfigFlow(ConfigFlow, domain=DOMAIN):
 
                 # Test-before-configure: verify the device is reachable
                 # and has the expected GATT characteristics
-                if not await self._async_validate_device(mac):
-                    errors["base"] = "cannot_connect"
+                if error := await self._async_validate_device(mac):
+                    errors["base"] = error
                 else:
                     return self.async_create_entry(
                         title=name,
@@ -234,9 +278,101 @@ class FanimationConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Change the MAC / name of an existing entry without re-adding it.
 
-class FanimationOptionsFlow(OptionsFlowWithConfigEntry):
-    """Handle options for Fanimation BLE."""
+        speed_count is intentionally not here — it is editable in the options flow.
+        The MAC may change (fix a typo / replaced receiver); we re-validate the new
+        address and block pointing at a fan that is already configured elsewhere.
+        """
+        reconfigure_entry = self._get_reconfigure_entry()
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            mac = _normalize_mac(user_input[CONF_MAC])
+            if mac is None:
+                errors[CONF_MAC] = "invalid_mac"
+            else:
+                name = user_input[CONF_NAME]
+                if mac != reconfigure_entry.unique_id:
+                    # MAC changed: re-key the entry and re-validate the new device.
+                    await self.async_set_unique_id(mac)
+                    self._abort_if_unique_id_configured()
+                    if error := await self._async_validate_device(mac):
+                        errors["base"] = error
+                if not errors:
+                    if mac != reconfigure_entry.unique_id:
+                        self._async_migrate_mac_registry(reconfigure_entry, mac)
+                    # Deliberately the non-reloading variant: the entry's update
+                    # listener (see __init__) already reloads on any change.
+                    # Pairing a listener with a reloading flow method reloads
+                    # twice and races; HA warns on it since 2026.6 and makes it
+                    # an error in 2026.12.
+                    return self.async_update_and_abort(
+                        reconfigure_entry,
+                        unique_id=mac,
+                        title=name,
+                        data_updates={CONF_MAC: mac, CONF_NAME: name},
+                    )
+
+        defaults = user_input or reconfigure_entry.data
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_MAC, default=defaults[CONF_MAC]): str,
+                    vol.Required(CONF_NAME, default=defaults[CONF_NAME]): str,
+                }
+            ),
+            errors=errors,
+        )
+
+    @callback
+    def _async_migrate_mac_registry(self, entry: ConfigEntry, new_mac: str) -> None:
+        """Re-key device and entity registry rows when reconfigure changes the MAC.
+
+        Entity unique_ids (``{mac}_fan|_light|_timer``) and the device identity
+        both embed the MAC. Without this migration a MAC change orphans the old
+        device and its three entities and registers fresh ``_2``-suffixed ones,
+        silently breaking automations, dashboards, and history that reference
+        the fan.
+        """
+        old_mac = entry.data[CONF_MAC]
+        entity_registry = er.async_get(self.hass)
+        for domain, suffix in (("fan", "_fan"), ("light", "_light"), ("number", "_timer")):
+            entity_id = entity_registry.async_get_entity_id(domain, DOMAIN, f"{old_mac}{suffix}")
+            if entity_id:
+                entity_registry.async_update_entity(entity_id, new_unique_id=f"{new_mac}{suffix}")
+        device_registry = dr.async_get(self.hass)
+        # HA 2026.8 replaced identifier lookups with the entry-scoped
+        # async_get_device_by_identifier(); the old async_get_device() still
+        # works there and is supported until 2027.8. Resolve the new method at
+        # runtime instead of calling it directly — it does not exist at all on
+        # the HA versions hacs.json still advertises (2024.12+), where a direct
+        # call would raise AttributeError mid-reconfigure.
+        get_by_identifier: Callable[[tuple[str, str], str], dr.DeviceEntry | None] | None = getattr(
+            device_registry, "async_get_device_by_identifier", None
+        )
+        if get_by_identifier is not None:
+            device = get_by_identifier((DOMAIN, old_mac), entry.entry_id)
+        else:
+            device = device_registry.async_get_device(identifiers={(DOMAIN, old_mac)})
+        if device:
+            device_registry.async_update_device(
+                device.id,
+                new_identifiers={(DOMAIN, new_mac)},
+                new_connections={(dr.CONNECTION_BLUETOOTH, new_mac)},
+            )
+
+
+class FanimationOptionsFlow(OptionsFlow):
+    """Handle options for Fanimation BLE.
+
+    Subclasses plain ``OptionsFlow``: the ``OptionsFlowWithConfigEntry`` base
+    is deprecated ("should not be referenced in new code", kept only for
+    custom-integration back-compat) and this flow never needed its mutable
+    options copy — all reads go straight to ``self.config_entry.options``.
+    """
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Manage the options."""
@@ -270,10 +406,7 @@ class FanimationOptionsFlow(OptionsFlowWithConfigEntry):
 
     def _defaults_section_schema(self) -> vol.Schema:
         """Build schema for fan & light defaults section."""
-        current_speed_count = self.options.get(
-            CONF_SPEED_COUNT,
-            self.config_entry.data.get(CONF_SPEED_COUNT, DEFAULT_SPEED_COUNT),
-        )
+        current_speed_count = resolved_speed_count(self.config_entry)
         # Default the reverse toggle from the detected fan type (ON only for
         # confirmed-reversible DC fans), read from the live coordinator state.
         coordinator = getattr(self.config_entry, "runtime_data", None)
@@ -287,7 +420,7 @@ class FanimationOptionsFlow(OptionsFlowWithConfigEntry):
                 ): _speed_count_field(),
                 vol.Required(
                     CONF_DEFAULT_SPEED,
-                    default=self.options.get(CONF_DEFAULT_SPEED, DEFAULT_SPEED_LAST_USED),
+                    default=self.config_entry.options.get(CONF_DEFAULT_SPEED, DEFAULT_SPEED_LAST_USED),
                 ): SelectSelector(
                     SelectSelectorConfig(
                         options=[
@@ -302,11 +435,11 @@ class FanimationOptionsFlow(OptionsFlowWithConfigEntry):
                 ),
                 vol.Required(
                     CONF_DEFAULT_BRIGHTNESS,
-                    default=self.options.get(CONF_DEFAULT_BRIGHTNESS, DEFAULT_BRIGHTNESS_LAST_USED),
+                    default=self.config_entry.options.get(CONF_DEFAULT_BRIGHTNESS, DEFAULT_BRIGHTNESS_LAST_USED),
                 ): NumberSelector(NumberSelectorConfig(min=0, max=100, step=1, mode=NumberSelectorMode.SLIDER)),
                 vol.Required(
                     CONF_SUPPORTS_REVERSE,
-                    default=self.options.get(CONF_SUPPORTS_REVERSE, detected_reverse),
+                    default=self.config_entry.options.get(CONF_SUPPORTS_REVERSE, detected_reverse),
                 ): bool,
             }
         )
@@ -317,11 +450,11 @@ class FanimationOptionsFlow(OptionsFlowWithConfigEntry):
             {
                 vol.Required(
                     CONF_NOTIFY_ON_DISCONNECT,
-                    default=self.options.get(CONF_NOTIFY_ON_DISCONNECT, DEFAULT_NOTIFY_ON_DISCONNECT),
+                    default=self.config_entry.options.get(CONF_NOTIFY_ON_DISCONNECT, DEFAULT_NOTIFY_ON_DISCONNECT),
                 ): bool,
                 vol.Required(
                     CONF_UNAVAILABLE_THRESHOLD,
-                    default=self.options.get(CONF_UNAVAILABLE_THRESHOLD, DEFAULT_UNAVAILABLE_THRESHOLD),
+                    default=self.config_entry.options.get(CONF_UNAVAILABLE_THRESHOLD, DEFAULT_UNAVAILABLE_THRESHOLD),
                 ): NumberSelector(
                     NumberSelectorConfig(
                         min=0,

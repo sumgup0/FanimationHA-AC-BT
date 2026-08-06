@@ -4,18 +4,22 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from homeassistant.components.number import NumberEntity, NumberMode
+from homeassistant.components.number import NumberDeviceClass, NumberEntity, NumberMode
 from homeassistant.const import UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import FanimationConfigEntry
-from .const import TIMER_MAX, TIMER_MIN
+from .const import DOMAIN, TIMER_MAX, TIMER_MIN
 from .entity import FanimationEntity
 
 if TYPE_CHECKING:
     from .coordinator import FanimationCoordinator
+
+# Serialise commands: every BLE write goes through the shared device-level lock,
+# so one in-flight command at a time matches HA's BLE convention.
+PARALLEL_UPDATES = 1
 
 
 async def async_setup_entry(
@@ -31,7 +35,10 @@ async def async_setup_entry(
 class FanimationTimer(FanimationEntity, NumberEntity):
     """Fanimation sleep timer entity."""
 
-    _attr_icon = "mdi:timer-outline"
+    # No entity_category: this is a primary operational control with live state
+    # (remaining minutes) that turns the fan + light off on expiry — not a static
+    # CONFIG knob or a read-only DIAGNOSTIC readout.
+    _attr_device_class = NumberDeviceClass.DURATION
     _attr_mode = NumberMode.SLIDER
     _attr_native_min_value = TIMER_MIN
     _attr_native_max_value = TIMER_MAX
@@ -62,18 +69,25 @@ class FanimationTimer(FanimationEntity, NumberEntity):
         attrs["timer_note"] = (
             "Fan must be running to set the timer. When it expires, both fan and light turn off. Set to 0 to cancel."
         )
-        attrs["rf_remote_sync"] = "State is verified before every command — RF remote changes are always respected"
         return attrs
 
     async def async_set_native_value(self, value: float) -> None:
         """Set the sleep timer.
 
-        The BTCR9 controller silently ignores the timer when the fan motor
-        is off (speed=0), regardless of whether the light is on.
+        The BTCR9 controller silently ignores the timer when the fan motor is
+        off (speed=0), regardless of whether the light is on. That rule is
+        enforced from the device's *verified* response, not the coordinator
+        cache: the cache can be minutes stale, so a fan just switched on by
+        the RF remote (not yet polled) must not be spuriously rejected. If the
+        verified state shows the timer did not take, surface the translatable
+        error. A ``None`` response (BLE failure) raises nothing here —
+        availability is the coordinator's concern.
         """
-        if int(value) > 0 and self.coordinator.data and self.coordinator.data.speed == 0:
-            raise HomeAssistantError(
-                "The sleep timer only works when the fan is running. Turn the fan on first, then set the timer."
-            )
-        await self.coordinator.device.async_set_state(timer_minutes=int(value))
+        minutes = int(value)
+        state = await self.coordinator.device.async_set_state(timer_minutes=minutes)
         await self.coordinator.async_start_fast_poll()
+        if minutes > 0 and state is not None and state.timer_minutes == 0:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="timer_requires_fan_on",
+            )

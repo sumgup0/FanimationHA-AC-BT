@@ -27,6 +27,8 @@ from homeassistant.components.bluetooth import BluetoothServiceInfoBleak
 from homeassistant.const import CONF_MAC, CONF_NAME
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.fanimation.const import CONF_SPEED_COUNT, DOMAIN
@@ -180,6 +182,32 @@ class TestBluetoothDiscovery:
 
         assert result["type"] is FlowResultType.ABORT
         assert result["reason"] == "not_fanimation"
+
+    async def test_discovery_busy_fan_aborts_with_cannot_connect(self, hass: HomeAssistant) -> None:
+        """A genuine fan that refuses the connection must NOT be called not-a-Fanimation.
+
+        The BTCR9 accepts a single BLE connection, so a fan busy with the
+        FanSync app fails at *connect* time. Regression guard: this used to
+        abort with the misleading ``not_fanimation`` reason.
+        """
+        with (
+            patch(
+                "custom_components.fanimation.config_flow.bluetooth.async_ble_device_from_address",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "custom_components.fanimation.config_flow.establish_connection",
+                side_effect=Exception("device busy"),
+            ),
+        ):
+            result = await hass.config_entries.flow.async_init(
+                DOMAIN,
+                context={"source": config_entries.SOURCE_BLUETOOTH},
+                data=FAKE_DISCOVERY,
+            )
+
+        assert result["type"] is FlowResultType.ABORT
+        assert result["reason"] == "cannot_connect"
 
 
 # ---------------------------------------------------------------------------
@@ -343,6 +371,45 @@ class TestManualEntry:
         assert result["type"] is FlowResultType.FORM
         assert result["errors"] == {"base": "cannot_connect"}
 
+    async def test_manual_gatt_inspection_failure_shows_cannot_connect(self, hass: HomeAssistant) -> None:
+        """An error while inspecting services (or disconnecting) maps to cannot_connect.
+
+        Also exercises the best-effort disconnect: a failing ``disconnect()``
+        must not mask the validation verdict.
+        """
+        with (
+            patch(
+                "custom_components.fanimation.config_flow.bluetooth.async_ble_device_from_address",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "custom_components.fanimation.config_flow.establish_connection",
+            ) as mock_conn,
+        ):
+            mock_client = AsyncMock()
+            services = MagicMock()
+            services.get_characteristic = MagicMock(side_effect=Exception("GATT read failed"))
+            mock_client.services = services
+            mock_client.disconnect = AsyncMock(side_effect=Exception("already dropped"))
+            mock_conn.return_value = mock_client
+
+            result = await hass.config_entries.flow.async_init(
+                DOMAIN,
+                context={"source": config_entries.SOURCE_USER},
+            )
+
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                user_input={
+                    CONF_MAC: TEST_MAC,
+                    CONF_NAME: TEST_NAME,
+                    CONF_SPEED_COUNT: "3",
+                },
+            )
+
+        assert result["type"] is FlowResultType.FORM
+        assert result["errors"] == {"base": "cannot_connect"}
+
 
 # ---------------------------------------------------------------------------
 # Duplicate MAC prevention
@@ -413,5 +480,232 @@ class TestDuplicatePrevention:
                 },
             )
 
+        assert result["type"] is FlowResultType.ABORT
+        assert result["reason"] == "already_configured"
+
+
+# ---------------------------------------------------------------------------
+# Reconfiguration flow (change MAC / name)
+# ---------------------------------------------------------------------------
+
+OTHER_MAC = "AA:BB:CC:DD:EE:FF"
+_VALIDATE = "custom_components.fanimation.config_flow.FanimationConfigFlow._async_validate_device"
+_SETUP = "custom_components.fanimation.async_setup_entry"
+
+
+def _existing_entry(hass: HomeAssistant) -> MockConfigEntry:
+    """Add and return a configured fan entry for reconfigure tests."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=TEST_MAC.upper(),
+        data={CONF_MAC: TEST_MAC.upper(), CONF_NAME: TEST_NAME, CONF_SPEED_COUNT: 3},
+    )
+    entry.add_to_hass(hass)
+    return entry
+
+
+class TestReconfigure:
+    """Tests for async_step_reconfigure (change MAC / name in place)."""
+
+    async def test_reconfigure_shows_form(self, hass: HomeAssistant) -> None:
+        entry = _existing_entry(hass)
+        result = await entry.start_reconfigure_flow(hass)
+        assert result["type"] is FlowResultType.FORM
+        assert result["step_id"] == "reconfigure"
+
+    async def test_reconfigure_rename_only_skips_validation(self, hass: HomeAssistant) -> None:
+        entry = _existing_entry(hass)
+        result = await entry.start_reconfigure_flow(hass)
+
+        with (
+            patch(_VALIDATE, AsyncMock(return_value=None)) as mock_validate,
+            patch(_SETUP, return_value=True),
+        ):
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                user_input={CONF_MAC: TEST_MAC.upper(), CONF_NAME: "Living Room Fan"},
+            )
+            await hass.async_block_till_done()
+
+        assert result["type"] is FlowResultType.ABORT
+        assert result["reason"] == "reconfigure_successful"
+        mock_validate.assert_not_called()
+        assert entry.data[CONF_NAME] == "Living Room Fan"
+        assert entry.data[CONF_MAC] == TEST_MAC.upper()
+        assert entry.data[CONF_SPEED_COUNT] == 3
+        assert entry.title == "Living Room Fan"
+
+    async def test_reconfigure_mac_change_validates_and_updates(self, hass: HomeAssistant) -> None:
+        entry = _existing_entry(hass)
+        result = await entry.start_reconfigure_flow(hass)
+
+        with (
+            patch(_VALIDATE, AsyncMock(return_value=None)) as mock_validate,
+            patch(_SETUP, return_value=True),
+        ):
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                user_input={CONF_MAC: OTHER_MAC, CONF_NAME: TEST_NAME},
+            )
+            await hass.async_block_till_done()
+
+        assert result["type"] is FlowResultType.ABORT
+        assert result["reason"] == "reconfigure_successful"
+        mock_validate.assert_awaited_once()
+        assert entry.data[CONF_MAC] == OTHER_MAC
+        assert entry.unique_id == OTHER_MAC
+
+    async def test_reconfigure_invalid_mac_shows_error(self, hass: HomeAssistant) -> None:
+        entry = _existing_entry(hass)
+        result = await entry.start_reconfigure_flow(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input={CONF_MAC: "not-a-mac", CONF_NAME: TEST_NAME},
+        )
+        assert result["type"] is FlowResultType.FORM
+        assert result["errors"] == {CONF_MAC: "invalid_mac"}
+
+    async def test_reconfigure_unreachable_shows_error(self, hass: HomeAssistant) -> None:
+        entry = _existing_entry(hass)
+        result = await entry.start_reconfigure_flow(hass)
+        with patch(_VALIDATE, AsyncMock(return_value="cannot_connect")):
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                user_input={CONF_MAC: OTHER_MAC, CONF_NAME: TEST_NAME},
+            )
+        assert result["type"] is FlowResultType.FORM
+        assert result["errors"] == {"base": "cannot_connect"}
+
+    async def test_reconfigure_mac_change_migrates_device_and_entity_registries(self, hass: HomeAssistant) -> None:
+        """Changing the MAC must re-key the existing device + entities, not orphan them.
+
+        Entity unique_ids and the device identifiers embed the MAC. Without
+        migration, the reload after reconfigure registers a brand-new device and
+        three new ``_2``-suffixed entities while the originals go permanently
+        unavailable — silently breaking automations, dashboards, and history.
+        """
+        entry = _existing_entry(hass)
+        device_registry = dr.async_get(hass)
+        entity_registry = er.async_get(hass)
+        device = device_registry.async_get_or_create(
+            config_entry_id=entry.entry_id,
+            identifiers={(DOMAIN, TEST_MAC.upper())},
+            connections={(dr.CONNECTION_BLUETOOTH, TEST_MAC.upper())},
+        )
+        old_entity_ids = {}
+        for domain, suffix in (("fan", "_fan"), ("light", "_light"), ("number", "_timer")):
+            old_entity_ids[domain] = entity_registry.async_get_or_create(
+                domain,
+                DOMAIN,
+                f"{TEST_MAC.upper()}{suffix}",
+                config_entry=entry,
+                device_id=device.id,
+            ).entity_id
+
+        result = await entry.start_reconfigure_flow(hass)
+        with (
+            patch(_VALIDATE, AsyncMock(return_value=None)),
+            patch(_SETUP, return_value=True),
+        ):
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                user_input={CONF_MAC: OTHER_MAC, CONF_NAME: TEST_NAME},
+            )
+            await hass.async_block_till_done()
+        assert result["reason"] == "reconfigure_successful"
+
+        # The same entity_ids are now keyed by the new-MAC unique_ids; the old
+        # unique_ids resolve to nothing (no orphans left behind).
+        for domain, suffix in (("fan", "_fan"), ("light", "_light"), ("number", "_timer")):
+            assert entity_registry.async_get_entity_id(domain, DOMAIN, f"{OTHER_MAC}{suffix}") == old_entity_ids[domain]
+            assert entity_registry.async_get_entity_id(domain, DOMAIN, f"{TEST_MAC.upper()}{suffix}") is None
+        migrated = device_registry.async_get_device(identifiers={(DOMAIN, OTHER_MAC)})
+        assert migrated is not None
+        assert migrated.id == device.id
+        assert device_registry.async_get_device(identifiers={(DOMAIN, TEST_MAC.upper())}) is None
+
+    async def test_reconfigure_migrates_via_entry_scoped_lookup(self, hass: HomeAssistant) -> None:
+        """The migration also works through the HA 2026.8+ entry-scoped lookup.
+
+        Patched in rather than relying on the installed HA: the pinned test
+        harness tracks stable HA, which does not have this method yet, so
+        without forcing it the 2026.8 branch would go unexercised.
+        """
+        entry = _existing_entry(hass)
+        device_registry = dr.async_get(hass)
+        device = device_registry.async_get_or_create(
+            config_entry_id=entry.entry_id,
+            identifiers={(DOMAIN, TEST_MAC.upper())},
+            connections={(dr.CONNECTION_BLUETOOTH, TEST_MAC.upper())},
+        )
+
+        result = await entry.start_reconfigure_flow(hass)
+        with (
+            patch.object(
+                dr.DeviceRegistry,
+                "async_get_device_by_identifier",
+                lambda self, identifier, config_entry_id: self.async_get_device(identifiers={identifier}),
+                create=True,
+            ),
+            patch(_VALIDATE, AsyncMock(return_value=None)),
+            patch(_SETUP, return_value=True),
+        ):
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                user_input={CONF_MAC: OTHER_MAC, CONF_NAME: TEST_NAME},
+            )
+            await hass.async_block_till_done()
+
+        assert result["reason"] == "reconfigure_successful"
+        migrated = device_registry.async_get_device(identifiers={(DOMAIN, OTHER_MAC)})
+        assert migrated is not None
+        assert migrated.id == device.id
+
+    async def test_reconfigure_migrates_on_pre_2026_8_device_registry(self, hass: HomeAssistant) -> None:
+        """The migration also works where async_get_device_by_identifier is absent.
+
+        That method arrived in HA 2026.8; hacs.json still advertises 2024.12+,
+        so the lookup is resolved at runtime with a fallback. Forcing it to None
+        exercises the legacy branch regardless of which HA the suite runs on.
+        """
+        entry = _existing_entry(hass)
+        device_registry = dr.async_get(hass)
+        device = device_registry.async_get_or_create(
+            config_entry_id=entry.entry_id,
+            identifiers={(DOMAIN, TEST_MAC.upper())},
+            connections={(dr.CONNECTION_BLUETOOTH, TEST_MAC.upper())},
+        )
+
+        result = await entry.start_reconfigure_flow(hass)
+        with (
+            patch.object(dr.DeviceRegistry, "async_get_device_by_identifier", None, create=True),
+            patch(_VALIDATE, AsyncMock(return_value=None)),
+            patch(_SETUP, return_value=True),
+        ):
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                user_input={CONF_MAC: OTHER_MAC, CONF_NAME: TEST_NAME},
+            )
+            await hass.async_block_till_done()
+
+        assert result["reason"] == "reconfigure_successful"
+        migrated = device_registry.async_get_device(identifiers={(DOMAIN, OTHER_MAC)})
+        assert migrated is not None
+        assert migrated.id == device.id
+
+    async def test_reconfigure_collision_aborts(self, hass: HomeAssistant) -> None:
+        entry = _existing_entry(hass)
+        other = MockConfigEntry(
+            domain=DOMAIN,
+            unique_id=OTHER_MAC,
+            data={CONF_MAC: OTHER_MAC, CONF_NAME: "Other Fan", CONF_SPEED_COUNT: 3},
+        )
+        other.add_to_hass(hass)
+
+        result = await entry.start_reconfigure_flow(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input={CONF_MAC: OTHER_MAC, CONF_NAME: TEST_NAME},
+        )
         assert result["type"] is FlowResultType.ABORT
         assert result["reason"] == "already_configured"
