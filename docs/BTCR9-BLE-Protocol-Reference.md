@@ -29,7 +29,7 @@
 
 The Fanimation BTCR9 is a Bluetooth Low Energy (BLE) receiver module installed inside Fanimation ceiling fans. It allows wireless control of the fan motor (speed, direction) and an integrated downlight (on/off, brightness) from a smartphone app (FanSync) or a physical RF remote (BTT9).
 
-This document describes the BLE protocol used to communicate with the BTCR9 — enough for any developer to build their own controller, Home Assistant integration, or automation script.
+This document describes the BLE protocol used to communicate with the BTCR9, in enough detail to build your own controller or integration.
 
 **What you can control over BLE:**
 
@@ -55,15 +55,13 @@ This document describes the BLE protocol used to communicate with the BTCR9 — 
 | Light | Downlight only (no uplight on this model) |
 | BLE device name | `CeilingFan` |
 | BLE advertising | Standard connectable advertising, no pairing or authentication required |
-| Concurrent connections | **One connection at a time** — the app and a script cannot connect simultaneously |
+| Concurrent connections | **One connection at a time** - the app and a script cannot connect simultaneously |
 
 The BLE chip appears to be a Texas Instruments CC2640 or CC2650 (based on the presence of a TI OAD firmware update service).
 
 ---
 
 ## 3. BLE Basics
-
-If you're new to Bluetooth Low Energy, here's a quick primer on the concepts used in this document.
 
 **GATT (Generic Attribute Profile)** is how BLE devices expose their data. Think of it as a structured database on the device.
 
@@ -86,13 +84,13 @@ If you're new to Bluetooth Low Energy, here's a quick primer on the concepts use
 
 The BTCR9 exposes the following GATT services and characteristics:
 
-### Fan Controller Service (Primary — this is what you use)
+### Fan Controller Service (Primary - this is what you use)
 
 | UUID | Type | Properties | Description |
 |------|------|------------|-------------|
-| `0000e000-0000-1000-8000-00805f9b34fb` | Service | — | Fan controller service |
-| `0000e001-0000-1000-8000-00805f9b34fb` | Characteristic | Write | **Command input** — send commands here |
-| `0000e002-0000-1000-8000-00805f9b34fb` | Characteristic | Notify | **Status output** — receive responses here |
+| `0000e000-0000-1000-8000-00805f9b34fb` | Service | - | Fan controller service |
+| `0000e001-0000-1000-8000-00805f9b34fb` | Characteristic | Write | **Command input** - send commands here |
+| `0000e002-0000-1000-8000-00805f9b34fb` | Characteristic | Notify | **Status output** - receive responses here |
 
 ### Generic Access Service (Standard BLE)
 
@@ -103,7 +101,7 @@ The BTCR9 exposes the following GATT services and characteristics:
 | `00002a01-...` | Characteristic | Appearance |
 | `00002a04-...` | Characteristic | Peripheral Preferred Connection Parameters |
 
-### TI OAD Service (Firmware Update — ignore this)
+### TI OAD Service (Firmware Update - ignore this)
 
 | UUID | Type | Description |
 |------|------|-------------|
@@ -172,18 +170,18 @@ Sets the fan state. Send to characteristic `0xE001` with the desired values:
 53 31 [SPEED] [DIR] [UPLIGHT] [DOWNLIGHT] [TIMER_HI] [TIMER_LO] [FANTYPE] [CHECKSUM]
 ```
 
-**Every field is sent in every command.** There is no way to change just one field — you must send the complete desired state. To change only the light, for example, you should first GET_STATUS to read the current speed and direction, then send SET_STATE with those values preserved and only the downlight byte changed.
+**Every field is sent in every command.** There is no way to change just one field - you must send the complete desired state. To change only the light, for example, you should first GET_STATUS to read the current speed and direction, then send SET_STATE with those values preserved and only the downlight byte changed.
 
 The fan responds with a STATUS_RESPONSE notification confirming the new state.
 
-**Example — turn fan to medium speed, light at 75%, no timer:**
+**Example - turn fan to medium speed, light at 75%, no timer:**
 ```
 53 31 02 00 00 4B 00 00 00 D1
 ```
 
-**Example — set a 2-hour (120-minute) timer with fan on low:**
+**Example - set a 2-hour (120-minute) timer with fan on low:**
 ```
-Timer: 120 = 0x0078 → TIMER_HI=0x00, TIMER_LO=0x78
+Timer: 120 = 0x0078 -> TIMER_HI=0x00, TIMER_LO=0x78
 53 31 01 00 00 00 00 78 00 FD
 ```
 
@@ -197,7 +195,7 @@ This is what the fan sends back on `0xE002` (via notification) in response to GE
 
 The byte layout is identical to SET_STATE except byte[1] is `0x32` instead of `0x31`.
 
-> **Important**: After a SET_STATE, the fan sends an immediate echo that may contain the values you sent — even if they are invalid. Always follow up with a GET_STATUS to confirm the actual fan state. See [Gotchas](#11-gotchas--edge-cases) for details.
+> **Important**: After a SET_STATE, the fan sends an immediate echo that may contain the values you sent - even if they are invalid. Always follow up with a GET_STATUS to confirm the actual fan state. See [Gotchas](#11-gotchas--edge-cases) for details.
 
 ---
 
@@ -205,11 +203,11 @@ The byte layout is identical to SET_STATE except byte[1] is `0x32` instead of `0
 
 | Value | Behavior |
 |-------|----------|
-| 0 | Off — motor stops |
+| 0 | Off - motor stops |
 | 1 | Lowest speed |
 | 2 to N-1 | Intermediate speed steps |
 | N | Highest speed supported by the connected motor |
-| N+1 or higher | **Silently turns the fan off** — see [Gotchas: Out-of-Range Speed](#out-of-range-speed-silently-turns-fan-off) |
+| N+1 or higher | **Silently turns the fan off** - see [Gotchas: Out-of-Range Speed](#out-of-range-speed-silently-turns-fan-off) |
 
 The maximum usable speed (N) depends on the specific fan. Reference points from real hardware:
 
@@ -229,9 +227,9 @@ Other Fanimation BLE fans likely fall somewhere in this range. The Home Assistan
 | 0 | Forward | Standard airflow direction (default) |
 | 1 | Reverse | Reversed airflow |
 
-**Motor-dependent — works on DC motors, not on the tested AC motor.** On a capacitor-switched **AC** motor (`fan_type`=0) the direction byte is accepted in SET_STATE but has no physical effect: the fan keeps spinning the same way and a follow-up GET_STATUS returns direction=0 (forward) regardless of the value sent. The BTT9 physical remote also has no reverse button. AC motors change direction with a physical DPDT switch on the motor housing.
+**Motor-dependent - works on DC motors, not on the tested AC motor.** On a capacitor-switched **AC** motor (`fan_type`=0) the direction byte is accepted in SET_STATE but has no physical effect: the fan keeps spinning the same way and a follow-up GET_STATUS returns direction=0 (forward) regardless of the value sent. The BTT9 physical remote also has no reverse button. AC motors change direction with a physical DPDT switch on the motor housing.
 
-On a **DC** motor (`fan_type`=2) electronic reverse works: community testing (#4) confirmed the blades physically reverse — instantly, whether the fan is stopped or spinning — and GET_STATUS reads the new direction back reliably in byte[3].
+On a **DC** motor (`fan_type`=2) electronic reverse works: community testing (#4) confirmed the blades physically reverse - instantly, whether the fan is stopped or spinning - and GET_STATUS reads the new direction back reliably in byte[3].
 
 The Home Assistant integration exposes a direction control for fans detected as reverse-capable (`fan_type`=2), with an options toggle to override the auto-detection. For AC fans the direction byte is preserved untouched from the current GET_STATUS during read-before-write.
 
@@ -248,7 +246,7 @@ The downlight is controlled via byte[5] with a brightness percentage:
 | 22 | Dim (observed from remote) |
 | 65 | Default on brightness (observed from remote) |
 | 100 | Maximum brightness |
-| 101-255 | **Silently rejected** — see below |
+| 101-255 | **Silently rejected** - see below |
 
 ### Out-of-Range Rejection Behavior
 
@@ -314,13 +312,13 @@ Send SET_STATE with byte[6]=0 and byte[7]=0 (timer minutes = 0) while preserving
 
 ### SET_STATE Echo Is Not Ground Truth
 
-When you send a SET_STATE command, the fan immediately responds with a STATUS_RESPONSE that echoes back whatever you sent — **even if the values are invalid**. For example, sending downlight=255 gets echoed as downlight=255, but a subsequent GET_STATUS reveals downlight=0 (rejected).
+When you send a SET_STATE command, the fan immediately responds with a STATUS_RESPONSE that echoes back whatever you sent - **even if the values are invalid**. For example, sending downlight=255 gets echoed as downlight=255, but a subsequent GET_STATUS reveals downlight=0 (rejected).
 
 **Always follow SET_STATE with GET_STATUS to verify the actual fan state.**
 
 ### Out-of-Range Speed Silently Turns Fan Off
 
-If you send a SPEED byte higher than the connected motor's physical maximum (for example, SPEED=5 on a 3-speed fan), the BTCR9 acknowledges the BLE write normally, but the verification GET_STATUS returns SPEED=0 — the fan turns off. There is no error code or rejection signal; the misconfigured value just looks like an off command after the fact.
+If you send a SPEED byte higher than the connected motor's physical maximum (for example, SPEED=5 on a 3-speed fan), the BTCR9 acknowledges the BLE write normally, but the verification GET_STATUS returns SPEED=0 - the fan turns off. There is no error code or rejection signal; the misconfigured value just looks like an off command after the fact.
 
 This caused a "stuck-off loop": a fan configured for too many speeds in Home Assistant would resend the over-range value on every "Last Used" turn-on, keeping itself permanently off. The fix (included in v1.2.0) is to make "Number of fan speeds" configurable per fan, and to read `_last_speed` from the verified GET_STATUS response rather than from the requested value.
 
@@ -332,11 +330,11 @@ The BTCR9 only accepts one BLE connection at a time. If the FanSync app is conne
 
 ### Direction Change Is Motor-Dependent
 
-The direction byte (byte[3]) works on DC motors but not on the capacitor-switched AC motor tested for this integration. On the AC fan (`fan_type`=0) the BLE chip echoes the value in the SET_STATE response, but a follow-up GET_STATUS reverts to 0 (forward) — no physical effect. On a community-tested DC fan (`fan_type`=2) the blades physically reverse and GET_STATUS reads the new value back. See [Section 8: Direction](#8-direction) for details.
+The direction byte (byte[3]) works on DC motors but not on the capacitor-switched AC motor tested for this integration. On the AC fan (`fan_type`=0) the BLE chip echoes the value in the SET_STATE response, but a follow-up GET_STATUS reverts to 0 (forward) - no physical effect. On a community-tested DC fan (`fan_type`=2) the blades physically reverse and GET_STATUS reads the new value back. See [Section 8: Direction](#8-direction) for details.
 
 ### RF Remote and BLE Are Independent
 
-The BTT9 RF remote communicates on 303.875 MHz, not via BLE. When someone uses the physical remote, the BLE chip does not send a notification — you must poll with GET_STATUS to discover state changes made by the remote.
+The BTT9 RF remote communicates on 303.875 MHz, not via BLE. When someone uses the physical remote, the BLE chip does not send a notification - you must poll with GET_STATUS to discover state changes made by the remote.
 
 ### Checksum Validation
 
@@ -414,10 +412,10 @@ The following protocol fields exist in the packet format but have not been verif
 | Byte | Field | Notes |
 |------|-------|-------|
 | 4 | Uplight | The BLE chip accepts values 0-255 and echoes them, but the BTCR9 has no uplight fixture. May work on Fanimation models with an uplight. |
-| 8 | Fan Type | Motor class: `0` on the tested AC fan, `2` on a community-tested DC fan. Appears to gate electronic reverse (DC only) — see [Direction](#8-direction). |
-| — | Timer range >360 | The FanSync app limits the timer to 360 minutes (6 hours). Values above 360 have not been tested. |
-| — | OAD Service | The TI OAD (Over-the-Air Download) firmware update service is present but has not been tested. Do not interact with it unless you know what you are doing. |
+| 8 | Fan Type | Motor class: `0` on the tested AC fan, `2` on a community-tested DC fan. Appears to gate electronic reverse (DC only) - see [Direction](#8-direction). |
+| - | Timer range >360 | The FanSync app limits the timer to 360 minutes (6 hours). Values above 360 have not been tested. |
+| - | OAD Service | The TI OAD (Over-the-Air Download) firmware update service is present but has not been tested. Do not interact with it unless you know what you are doing. |
 
 ---
 
-*This protocol was reverse-engineered from the [SimpleFanController](https://github.com/toddhutch/SimpleFanController) Java/TinyB project (targeting DC fans) and verified against BTCR9 AC motor hardware — plus community DC-motor testing (#4) — using Python/bleak diagnostic scripts. All findings are based on empirical testing; no official Fanimation documentation was used.*
+*This protocol was reverse-engineered from the [SimpleFanController](https://github.com/toddhutch/SimpleFanController) Java/TinyB project (targeting DC fans) and verified against BTCR9 AC motor hardware - plus community DC-motor testing (#4) - using Python/bleak diagnostic scripts. All findings are based on empirical testing; no official Fanimation documentation was used.*
