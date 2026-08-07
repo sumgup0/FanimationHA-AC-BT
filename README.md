@@ -7,7 +7,7 @@
 [![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/default)
 [![GitHub release](https://img.shields.io/github/v/release/sumgup0/FanimationHA-AC-BT)](https://github.com/sumgup0/FanimationHA-AC-BT/releases)
 
-Control your Fanimation ceiling fan from [Home Assistant](https://www.home-assistant.io/) over **local Bluetooth** - speed, downlight, and sleep timer, with no cloud, no app, and no internet. Works with both AC and DC fans, but only those that use Bluetooth receivers (such as BTCR9) and **not** the WiFi models.
+Control your Fanimation ceiling fan from [Home Assistant](https://www.home-assistant.io/) over **fully local Bluetooth** - speed, downlight, and sleep timer - no cloud, FanSync app, or internet access required. Works with both AC and DC fans, but only those that use Bluetooth receivers (such as BTCR9) and **not** the WiFi models.
 
 > ### ⚠️ Bluetooth only - not WiFi
 > Fanimation uses the "FanSync" name for **both** Bluetooth and WiFi receivers; only Bluetooth works here. **Not sure which you have?** Hold a BLE scanner app (e.g. [nRF Connect](https://www.nordicsemi.com/Products/Development-tools/nRF-Connect-for-mobile), LightBlue) near the fan - if a device named **`CeilingFan`** appears you're good; if nothing shows and you set the fan up over WiFi, it's a WiFi model and won't work.
@@ -49,22 +49,21 @@ Ready-to-adapt YAML for several of these is in [Example automations](#example-au
 
 ## What Works
 
-The BTCR9 BLE protocol has been reverse-engineered and verified on real AC hardware (DC fans community-tested):
+The BTCR9 BLE protocol has been reverse-engineered and verified on real AC hardware (and DC fans have been community-tested):
 
 | Feature | Range | Status |
 |---------|-------|--------|
-| Fan speed | Off, then 1 up to your fan's max speed (set speed count in options - default 3, up to 99) | Verified on 3-speed AC and 6- & 32-speed DC fans |
-| Fan direction | Forward / Reverse | DC fans auto-detected and option is shown by default ([#4](https://github.com/sumgup0/FanimationHA-AC-BT/issues/4)), but can toggle in per-fan settings |
-| Downlight brightness | 0-100% | Verified |
-| Sleep timer | 0-360 minutes | Verified |
+| **Fan speed** | Off, then 1 up to your fan's max speed (set speed count in options - default 3, up to 99) | Verified on 3-speed AC as well as 6- and 32-speed DC fans |
+| **Fan direction** | Forward / Reverse | Shown by default for DC fans (which are auto-detected) ([#4](https://github.com/sumgup0/FanimationHA-AC-BT/issues/4)), but can toggle on/off for any fan type in per-fan settings |
+| **Downlight brightness** | 0-100% | Verified |
+| **Sleep timer** | 0-360 minutes | Verified |
 
-## Prerequisites
+## Installation
+
+### Prerequisites
 
 - **Home Assistant 2024.12 or newer**, with the built-in **Bluetooth** integration enabled.
 - **Bluetooth reachability to the fan** - either a Bluetooth adapter on your HA host (built-in or USB), **or** an [ESP32 Bluetooth proxy](https://esphome.io/projects/?type=bluetooth) within range.
-- **No cloud account, no internet, no FanSync app** required - control is 100% local.
-
-## Installation
 
 ### HACS (Recommended)
 
@@ -97,10 +96,10 @@ Everything stays local - no cloud account, no data stored outside Home Assistant
 
 This integration talks to the fan's **Bluetooth receiver**, so it should work with any Fanimation ceiling fan that uses a **BTCR9-class FanSync Bluetooth receiver** - regardless of the specific fan model, motor type, or speed count. The hardware listed below is what has been **tested**. Other Fanimation Bluetooth fans may well work; they just have not been reported yet.
 
-**Tested hardware:**
+**Maintainer-tested hardware:**
 
-- **BLE receiver**: Fanimation BTCR9 FanSync **Bluetooth** Receiver - the specific module tested. Other Fanimation FanSync *Bluetooth* receivers are expected to use the same protocol.
-- **Physical remote**: Fanimation BTT9 (3 speeds, downlight, no reverse button) - the remote on the tested setup. The remote model doesn't affect Bluetooth control; any FanSync BT remote should coexist fine.
+- **BLE receiver**: Fanimation BTCR9 FanSync **Bluetooth** Receiver - the specific module tested. Other Fanimation FanSync Bluetooth receivers are expected to use the same protocol.
+- **Physical remote**: Fanimation BTT9 (3 speeds, downlight, no reverse button) - the remote on the tested setup. The remote model doesn't affect Bluetooth control; any FanSync RF/BT remote should coexist fine.
 
 **Motor types:**
 
@@ -191,6 +190,8 @@ The poll interval is not configurable. The **Unavailable threshold** option does
 - **Entities go grey / "unavailable"?** BLE polling failed repeatedly. Move the fan closer to an adapter/proxy, or raise the **Unavailable threshold** in the integration's options.
 - **State seems to lag the physical remote.** The RF remote is independent of Bluetooth; the integration polls and reconciles state, so remote changes appear after the next poll rather than instantly.
 - **Sleep timer won't set / immediately reads 0?** The fan must be *running* before you set a timer - the BTCR9 controller silently ignores a timer set while the fan is off. Turn the fan on first, then set the minutes.
+- **Replaced your receiver or fan?** Use **Reconfigure** (Settings -> Devices & Services -> the entry's three-dot menu -> Reconfigure) to change the MAC address in place - entity history and automations survive, no delete-and-re-add needed.
+- **Reporting a bug?** Attach a diagnostics download (the fan's device page -> **Download diagnostics**) to your issue - it captures the integration's state with identifiers redacted.
 - **I have a Fanimation *WiFi* fan.** This integration is Bluetooth-only and cannot control WiFi fans - see the note at the top.
 
 ## For Developers
@@ -201,6 +202,10 @@ The poll interval is not configurable. The **Unavailable threshold** option does
 ## Project History
 
 Originally inspired by [toddhutch/SimpleFanController](https://github.com/toddhutch/SimpleFanController), which targeted DC Bluetooth fans using Java/TinyB. This project is a ground-up rewrite in Python/bleak for the Fanimation BTCR9 FanSync BLE receiver as a Home Assistant integration.
+
+## Acknowledgments
+
+This integration was developed with the assistance of Claude (Anthropic).
 
 ## License
 
