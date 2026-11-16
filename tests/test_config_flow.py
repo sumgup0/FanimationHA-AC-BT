@@ -664,7 +664,7 @@ class TestReconfigure:
     async def test_reconfigure_migrates_on_pre_2026_8_device_registry(self, hass: HomeAssistant) -> None:
         """The migration also works where async_get_device_by_identifier is absent.
 
-        That method arrived in HA 2026.8; hacs.json still advertises 2024.12+,
+        That method arrived in HA 2026.8; hacs.json still advertises 2025.8+,
         so the lookup is resolved at runtime with a fallback. Forcing it to None
         exercises the legacy branch regardless of which HA the suite runs on.
         """

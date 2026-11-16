@@ -3,7 +3,7 @@
 <sub>Repository: `FanimationHA-AC-BT`</sub>
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Home Assistant 2024.12+](https://img.shields.io/badge/Home%20Assistant-2024.12%2B-blue.svg)](https://www.home-assistant.io/)
+[![Home Assistant 2025.8+](https://img.shields.io/badge/Home%20Assistant-2025.8%2B-blue.svg)](https://www.home-assistant.io/)
 [![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/default)
 [![GitHub release](https://img.shields.io/github/v/release/sumgup0/FanimationHA-AC-BT)](https://github.com/sumgup0/FanimationHA-AC-BT/releases)
 
@@ -62,7 +62,7 @@ The BTCR9 BLE protocol has been reverse-engineered and verified on real AC hardw
 
 ### Prerequisites
 
-- **Home Assistant 2024.12 or newer**, with the built-in **Bluetooth** integration enabled.
+- **Home Assistant 2025.8 or newer**, with the built-in **Bluetooth** integration enabled.
 - **Bluetooth reachability to the fan** - either a Bluetooth adapter on your HA host (built-in or USB), **or** an [ESP32 Bluetooth proxy](https://esphome.io/projects/?type=bluetooth) within range.
 
 ### HACS (Recommended)
