@@ -67,11 +67,13 @@ The BTCR9 BLE protocol has been reverse-engineered and verified on real AC hardw
 
 ### Home Assistant 2026.11 or newer (Marketplace)
 
-HACS is now built into Home Assistant as the **Marketplace**.
+Starting with Home Assistant 2026.11, HACS is built in as the **Marketplace**.
 
 1. Go to **Settings -> Marketplace** and search for **Fanimation BLE Ceiling Fan**.
-2. Select it and click **Install**. No restart is needed.
-3. The fan should be auto-discovered over Bluetooth. If not, add it manually: **Settings -> Devices & Services -> Add Integration -> Fanimation BLE Ceiling Fan**, and enter the MAC address (see [Troubleshooting](#troubleshooting)).
+2. Select it and click **Install**.
+3. Add the fan: **Settings -> Devices & Services -> Add Integration -> Fanimation BLE Ceiling Fan**, and enter the MAC address (see [Troubleshooting](#troubleshooting)). This works without a restart.
+
+Bluetooth auto-discovery of the fan only starts after the next Home Assistant restart. If you would rather have the fan discovered than enter its MAC address, restart Home Assistant after step 2.
 
 ### Home Assistant 2025.8 to 2026.10 (HACS)
 
@@ -95,7 +97,8 @@ This integration is in the **HACS default store**, so no custom repository is ne
 1. In Home Assistant, go to **Settings -> Devices & Services**.
 2. Find the **Fanimation BLE Ceiling Fan** entry, open its three-dot menu, and choose **Delete**. Home Assistant unloads the integration - stopping Bluetooth polling and disconnecting from the fan - and removes its device and entities automatically.
 3. *(Optional)* To remove the code as well:
-   - **HACS:** open **HACS -> Fanimation BLE Ceiling Fan**, three-dot menu -> **Remove**, then restart Home Assistant.
+   - **Marketplace (HA 2026.11 or newer):** go to **Settings -> Marketplace -> Installed**, open the three-dot menu next to **Fanimation BLE Ceiling Fan**, and choose **Uninstall**. Restart Home Assistant if it asks you to.
+   - **HACS (HA 2026.10 or older):** open **HACS -> Fanimation BLE Ceiling Fan**, three-dot menu -> **Remove**, then restart Home Assistant.
    - **Manual install:** delete the `custom_components/fanimation/` folder and restart Home Assistant.
 
 Everything stays local - no cloud account, no data stored outside Home Assistant - so deleting the entry leaves nothing behind online or on the fan. The fan continues to work with its physical RF remote.
