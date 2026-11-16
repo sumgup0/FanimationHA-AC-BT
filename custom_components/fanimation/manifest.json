@@ -2,6 +2,7 @@
   "domain": "fanimation",
   "name": "Fanimation BLE Ceiling Fan",
   "bluetooth": [{"local_name": "CeilingFan"}],
+  "categories": ["climate.fans_ventilation"],
   "codeowners": ["@sumgup0"],
   "config_flow": true,
   "dependencies": ["bluetooth", "bluetooth_adapters"],
