@@ -65,7 +65,15 @@ The BTCR9 BLE protocol has been reverse-engineered and verified on real AC hardw
 - **Home Assistant 2025.8 or newer**, with the built-in **Bluetooth** integration enabled.
 - **Bluetooth reachability to the fan** - either a Bluetooth adapter on your HA host (built-in or USB), **or** an [ESP32 Bluetooth proxy](https://esphome.io/projects/?type=bluetooth) within range.
 
-### HACS (Recommended)
+### Home Assistant 2026.11 or newer (Marketplace)
+
+HACS is now built into Home Assistant as the **Marketplace**.
+
+1. Go to **Settings -> Marketplace** and search for **Fanimation BLE Ceiling Fan**.
+2. Select it and click **Install**. No restart is needed.
+3. The fan should be auto-discovered over Bluetooth. If not, add it manually: **Settings -> Devices & Services -> Add Integration -> Fanimation BLE Ceiling Fan**, and enter the MAC address (see [Troubleshooting](#troubleshooting)).
+
+### Home Assistant 2025.8 to 2026.10 (HACS)
 
 This integration is in the **HACS default store**, so no custom repository is needed.
 
