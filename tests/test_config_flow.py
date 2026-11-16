@@ -619,10 +619,10 @@ class TestReconfigure:
         for domain, suffix in (("fan", "_fan"), ("light", "_light"), ("number", "_timer")):
             assert entity_registry.async_get_entity_id(domain, DOMAIN, f"{OTHER_MAC}{suffix}") == old_entity_ids[domain]
             assert entity_registry.async_get_entity_id(domain, DOMAIN, f"{TEST_MAC.upper()}{suffix}") is None
-        migrated = device_registry.async_get_device(identifiers={(DOMAIN, OTHER_MAC)})
+        migrated = device_registry.async_get_device_by_identifier((DOMAIN, OTHER_MAC), entry.entry_id)
         assert migrated is not None
         assert migrated.id == device.id
-        assert device_registry.async_get_device(identifiers={(DOMAIN, TEST_MAC.upper())}) is None
+        assert device_registry.async_get_device_by_identifier((DOMAIN, TEST_MAC.upper()), entry.entry_id) is None
 
     async def test_reconfigure_migrates_via_entry_scoped_lookup(self, hass: HomeAssistant) -> None:
         """The migration also works through the HA 2026.8+ entry-scoped lookup.
@@ -657,7 +657,7 @@ class TestReconfigure:
             await hass.async_block_till_done()
 
         assert result["reason"] == "reconfigure_successful"
-        migrated = device_registry.async_get_device(identifiers={(DOMAIN, OTHER_MAC)})
+        migrated = device_registry.async_get_device_by_identifier((DOMAIN, OTHER_MAC), entry.entry_id)
         assert migrated is not None
         assert migrated.id == device.id
 
@@ -689,7 +689,7 @@ class TestReconfigure:
             await hass.async_block_till_done()
 
         assert result["reason"] == "reconfigure_successful"
-        migrated = device_registry.async_get_device(identifiers={(DOMAIN, OTHER_MAC)})
+        migrated = device_registry.async_get_device_by_identifier((DOMAIN, OTHER_MAC), entry.entry_id)
         assert migrated is not None
         assert migrated.id == device.id
 
