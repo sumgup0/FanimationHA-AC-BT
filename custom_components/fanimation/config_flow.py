@@ -347,8 +347,8 @@ class FanimationConfigFlow(ConfigFlow, domain=DOMAIN):
         # HA 2026.8 replaced identifier lookups with the entry-scoped
         # async_get_device_by_identifier(); the old async_get_device() still
         # works there and is supported until 2027.8. Resolve the new method at
-        # runtime instead of calling it directly — it does not exist at all on
-        # the HA versions hacs.json still advertises (2024.12+), where a direct
+        # runtime instead of calling it directly - it does not exist before HA
+        # 2026.8, and hacs.json still allows older releases, where a direct
         # call would raise AttributeError mid-reconfigure.
         get_by_identifier: Callable[[tuple[str, str], str], dr.DeviceEntry | None] | None = getattr(
             device_registry, "async_get_device_by_identifier", None

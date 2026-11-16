@@ -43,3 +43,26 @@ warn_unused_ignores = true
 warn_redundant_casts = true
 disallow_untyped_defs = true
 exclude = "tests/"
+
+# HA 2026.9 replaced voluptuous with probatio and aliases the `voluptuous` name
+# to it in sys.modules when the `homeassistant` package is imported, so
+# `import voluptuous as vol` still runs. The real voluptuous stays installed as
+# a transitive dependency, though, so mypy types our schemas as voluptuous ones
+# while HA's flow helpers now expect probatio ones. Importing probatio directly
+# would break HA older than 2026.9, so treat the name as untyped instead
+# (measured 2026-11-15 on HA 2026.10.4: 6 arg-type errors in config_flow.py
+# without this). Remove once the hacs.json minimum reaches 2026.9 and the code
+# imports probatio directly.
+[[tool.mypy.overrides]]
+module = ["voluptuous", "voluptuous.*"]
+follow_imports = "skip"
+
+# HA 2026.10 moved FanEntityFeature, DIRECTION_* and ATTR_BRIGHTNESS into each
+# platform's const.py and re-exports them from the package without `__all__`,
+# which strict mode rejects. The package-level names are the only import path
+# that works across the supported range (fan/const.py does not exist in 2025.8).
+# Remove once the hacs.json minimum reaches 2026.10 and the code imports from
+# the const modules.
+[[tool.mypy.overrides]]
+module = ["homeassistant.components.fan", "homeassistant.components.light"]
+implicit_reexport = true

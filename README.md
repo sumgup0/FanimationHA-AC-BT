@@ -3,7 +3,7 @@
 <sub>Repository: `FanimationHA-AC-BT`</sub>
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Home Assistant 2024.12+](https://img.shields.io/badge/Home%20Assistant-2024.12%2B-blue.svg)](https://www.home-assistant.io/)
+[![Home Assistant 2025.8+](https://img.shields.io/badge/Home%20Assistant-2025.8%2B-blue.svg)](https://www.home-assistant.io/)
 [![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/default)
 [![GitHub release](https://img.shields.io/github/v/release/sumgup0/FanimationHA-AC-BT)](https://github.com/sumgup0/FanimationHA-AC-BT/releases)
 
@@ -62,10 +62,20 @@ The BTCR9 BLE protocol has been reverse-engineered and verified on real AC hardw
 
 ### Prerequisites
 
-- **Home Assistant 2024.12 or newer**, with the built-in **Bluetooth** integration enabled.
+- **Home Assistant 2025.8 or newer**, with the built-in **Bluetooth** integration enabled.
 - **Bluetooth reachability to the fan** - either a Bluetooth adapter on your HA host (built-in or USB), **or** an [ESP32 Bluetooth proxy](https://esphome.io/projects/?type=bluetooth) within range.
 
-### HACS (Recommended)
+### Home Assistant 2026.11 or newer (Marketplace)
+
+Starting with Home Assistant 2026.11, HACS is built in as the **Marketplace**.
+
+1. Go to **Settings -> Marketplace** and search for **Fanimation BLE Ceiling Fan**.
+2. Select it and click **Install**.
+3. Add the fan: **Settings -> Devices & Services -> Add Integration -> Fanimation BLE Ceiling Fan**, and enter the MAC address (see [Troubleshooting](#troubleshooting)). This works without a restart.
+
+Bluetooth auto-discovery of the fan only starts after the next Home Assistant restart. If you would rather have the fan discovered than enter its MAC address, restart Home Assistant after step 2.
+
+### Home Assistant 2025.8 to 2026.10 (HACS)
 
 This integration is in the **HACS default store**, so no custom repository is needed.
 
@@ -87,7 +97,8 @@ This integration is in the **HACS default store**, so no custom repository is ne
 1. In Home Assistant, go to **Settings -> Devices & Services**.
 2. Find the **Fanimation BLE Ceiling Fan** entry, open its three-dot menu, and choose **Delete**. Home Assistant unloads the integration - stopping Bluetooth polling and disconnecting from the fan - and removes its device and entities automatically.
 3. *(Optional)* To remove the code as well:
-   - **HACS:** open **HACS -> Fanimation BLE Ceiling Fan**, three-dot menu -> **Remove**, then restart Home Assistant.
+   - **Marketplace (HA 2026.11 or newer):** go to **Settings -> Marketplace -> Installed**, open the three-dot menu next to **Fanimation BLE Ceiling Fan**, and choose **Uninstall**. Restart Home Assistant if it asks you to.
+   - **HACS (HA 2026.10 or older):** open **HACS -> Fanimation BLE Ceiling Fan**, three-dot menu -> **Remove**, then restart Home Assistant.
    - **Manual install:** delete the `custom_components/fanimation/` folder and restart Home Assistant.
 
 Everything stays local - no cloud account, no data stored outside Home Assistant - so deleting the entry leaves nothing behind online or on the fan. The fan continues to work with its physical RF remote.

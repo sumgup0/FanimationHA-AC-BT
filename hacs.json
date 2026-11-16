@@ -1,5 +1,5 @@
 {
   "name": "Fanimation BLE Ceiling Fan",
-  "homeassistant": "2024.12.0",
+  "homeassistant": "2025.8.0",
   "hacs": "2.0.0"
 }
