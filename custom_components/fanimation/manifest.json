@@ -13,5 +13,5 @@
   "loggers": ["custom_components.fanimation"],
   "quality_scale": "platinum",
   "requirements": ["bleak-retry-connector>=4.0.0"],
-  "version": "2.0.0"
+  "version": "2.0.1"
 }
